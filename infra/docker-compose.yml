@@ -1,0 +1,301 @@
+version: "3.9"
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "25m"
+    max-file: "3"
+
+services:
+  # ---------- PostgreSQL ----------
+  postgres:
+    image: postgres:16-alpine
+    container_name: tbd-postgres
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: tbd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tbd_dev_password}
+      POSTGRES_DB: tbd
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    command:
+      - "postgres"
+      - "-c" 
+      - "shared_buffers=8GB"
+      - "-c"
+      - "effective_cache_size=24GB"
+      - "-c"
+      - "work_mem=64MB"
+      - "-c"
+      - "maintenance_work_mem=1GB"
+      - "-c"
+      - "wal_buffers=64MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "max_wal_size=4GB"
+      - "-c"
+      - "max_worker_processes=16"
+      - "-c"
+      - "max_parallel_workers_per_gather=4"
+      - "-c"
+      - "max_parallel_workers=8"
+      - "-c"
+      - "max_parallel_maintenance_workers=4"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "log_min_duration_statement=500"
+    shm_size: 2g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tbd"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---------- OCI Registry (registry:2) ----------
+  registry:
+    image: registry:2
+    container_name: tbd-registry
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "5000:5000"
+    environment:
+      REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY: /var/lib/registry
+      REGISTRY_AUTH: htpasswd
+      REGISTRY_AUTH_HTPASSWD_REALM: "TBD Registry"
+      REGISTRY_AUTH_HTPASSWD_PATH: /auth/htpasswd
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    volumes:
+      - registry_data:/var/lib/registry
+      - ./registry/auth:/auth:ro
+      - ./registry/config.yml:/etc/docker/registry/config.yml:ro
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "5000"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ---------- Nginx Ingress ----------
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: tbd-nginx
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/entrypoint.sh:/docker-entrypoint-custom.sh:ro
+      - nginx_upstreams:/etc/nginx/conf.d/upstreams
+      - nginx_reload:/var/run/nginx-reload
+    entrypoint: ["/bin/sh", "/docker-entrypoint-custom.sh"]
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ---------- TBD API ----------
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    container_name: tbd-api
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "8000:8000"
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://tbd:${POSTGRES_PASSWORD:-tbd_dev_password}@postgres:5432/tbd
+      # Active Directory
+      AD_LDAP_URL: ${AD_LDAP_URL}
+      AD_BASE_DN: ${AD_BASE_DN}
+      AD_BIND_DN: ${AD_BIND_DN}
+      AD_BIND_PASSWORD: ${AD_BIND_PASSWORD}
+      # Auth / JWT
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
+      # Registry
+      REGISTRY_URL: http://registry.dev.sdc.cpp:5000
+      REGISTRY_IP: ${REGISTRY_IP:-}
+      REGISTRY_USERNAME: ${REGISTRY_USERNAME:-}
+      REGISTRY_PASSWORD: ${REGISTRY_PASSWORD:-}
+      # GitHub App
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      # GitHub OAuth (user account linking)
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      # Docker CLI (for builder) — pin API version to match host daemon
+      DOCKER_API_VERSION: ${DOCKER_API_VERSION:-1.41}
+      # Deploy queue
+      DEPLOY_MAX_CONCURRENT: ${DEPLOY_MAX_CONCURRENT:-2}
+      DEPLOY_QUEUE_MAX_SIZE: ${DEPLOY_QUEUE_MAX_SIZE:-50}
+      # CORS
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://dev.sdc.cpp}
+      # Proxmox
+      PROXMOX_API_URL: ${PROXMOX_API_URL:-https://localhost:8006}
+      PROXMOX_VERIFY_SSL: ${PROXMOX_VERIFY_SSL:-false}
+      PROXMOX_TOKEN_ID: ${PROXMOX_TOKEN_ID:-}
+      PROXMOX_TOKEN_SECRET: ${PROXMOX_TOKEN_SECRET:-}
+      PROXMOX_STORAGE: ${PROXMOX_STORAGE:-local-lvm}
+      PROXMOX_TEMPLATE_STORAGE: ${PROXMOX_TEMPLATE_STORAGE:-local}
+      PROXMOX_POOL: ${PROXMOX_POOL:-}
+      PROXMOX_BRIDGE: ${PROXMOX_BRIDGE:-vmbr0}
+      # Flat IP allocation (temporary — bypasses VLAN)
+      DEPLOY_IP_START: ${DEPLOY_IP_START:-}
+      DEPLOY_IP_END: ${DEPLOY_IP_END:-}
+      DEPLOY_GATEWAY: ${DEPLOY_GATEWAY:-}
+      DEPLOY_SUBNET_BITS: ${DEPLOY_SUBNET_BITS:-24}
+      # OCI conversion
+      OCI_WORK_DIR: ${OCI_WORK_DIR:-/var/lib/tbd/oci}
+      # Networking / Domain
+      DEPLOY_DOMAIN_SUFFIX: ${DEPLOY_DOMAIN_SUFFIX:-dev.sdc.cpp}
+      NGINX_UPSTREAM_DIR: /etc/nginx/conf.d/upstreams
+      NGINX_RELOAD_FLAG_DIR: /var/run/nginx-reload
+      NGINX_INGRESS_IP: ${NGINX_INGRESS_IP:-}
+      PLATFORM_API_IP: ${PLATFORM_API_IP:-}
+      NFS_SERVER_IP: ${NFS_SERVER_IP:-}
+      INTERNAL_DNS_IP: ${INTERNAL_DNS_IP:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../api/app:/app/app
+      - oci_work:/var/lib/tbd/oci
+      - build_work:/var/lib/tbd/builds
+      - nginx_upstreams:/etc/nginx/conf.d/upstreams
+      - nginx_reload:/var/run/nginx-reload
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # ---------- TBD Web UI ----------
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+    container_name: tbd-web
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # ---------- Loki (Log Aggregation) ----------
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: tbd-loki
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---------- Promtail (Log Collector) ----------
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: tbd-promtail
+    restart: unless-stopped
+    logging: *default-logging
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+
+  # ---------- Prometheus (Metrics) ----------
+  prometheus:
+    image: prom/prometheus:v2.49.1
+    container_name: tbd-prometheus
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # ---------- Grafana (Dashboards) ----------
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: tbd-grafana
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-tbd_admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pg_data:
+  registry_data:
+  loki_data:
+  prometheus_data:
+  grafana_data:
+  oci_work:
+  build_work:
+  nginx_upstreams:
+  nginx_reload:

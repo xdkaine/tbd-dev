@@ -1,0 +1,171 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useAuth } from "@/contexts/auth";
+import { useEffect } from "react";
+import clsx from "clsx";
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Projects", roles: ["JAS_Developer", "JAS-Staff", "JAS-Faculty"] },
+  { href: "/settings", label: "Settings", roles: ["JAS_Developer", "JAS-Staff", "JAS-Faculty"] },
+  { href: "/admin", label: "Admin", roles: ["JAS-Staff", "JAS-Faculty"], exact: true, section: "admin" },
+  { href: "/admin/users", label: "Users", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+  { href: "/admin/quotas", label: "Quotas", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+  { href: "/admin/network-policies", label: "Network Policies", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+  { href: "/admin/vlans", label: "VLANs", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+  { href: "/admin/audit", label: "Audit Log", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+];
+
+interface NavItem {
+  href: string;
+  label: string;
+  roles: string[];
+  exact?: boolean;
+  section?: string;
+  indent?: boolean;
+}
+
+interface SidebarProps {
+  /** Mobile-only: whether the sidebar drawer is open */
+  mobileOpen?: boolean;
+  /** Mobile-only: callback to close the drawer */
+  onMobileClose?: () => void;
+}
+
+/** Sidebar content shared between desktop and mobile */
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  const { user, logout } = useAuth();
+  const pathname = usePathname();
+
+  if (!user) return null;
+
+  const visibleItems = NAV_ITEMS.filter((item) =>
+    item.roles.includes(user.role),
+  );
+
+  return (
+    <>
+      {/* Brand */}
+      <div className="flex h-14 items-center border-b border-gray-200 px-4">
+        <Link
+          href="/dashboard"
+          className="text-lg font-bold text-brand-700"
+          onClick={onNavigate}
+        >
+          TBD
+        </Link>
+        <span className="ml-2 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 uppercase">
+          {user.role}
+        </span>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
+        {visibleItems.map((item) => {
+          const isActive = item.exact
+            ? pathname === item.href
+            : pathname.startsWith(item.href);
+
+          return (
+            <div key={item.href}>
+              {item.section === "admin" && (
+                <div className="mb-1 mt-4 border-t border-gray-200 pt-3">
+                  <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    Admin
+                  </p>
+                </div>
+              )}
+              <Link
+                href={item.href}
+                onClick={onNavigate}
+                className={clsx(
+                  "block rounded-md py-1.5 text-sm font-medium",
+                  item.indent ? "pl-6 pr-3" : "px-3",
+                  isActive
+                    ? "bg-brand-100 text-brand-800"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+                )}
+              >
+                {item.label}
+              </Link>
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* User footer */}
+      <div className="border-t border-gray-200 p-3">
+        <p className="truncate text-sm font-medium text-gray-900">
+          {user.display_name}
+        </p>
+        <p className="truncate text-xs text-gray-500">{user.email}</p>
+        <button
+          onClick={logout}
+          className="mt-2 text-xs text-red-600 hover:text-red-800"
+        >
+          Sign out
+        </button>
+      </div>
+    </>
+  );
+}
+
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
+  const pathname = usePathname();
+
+  // Close mobile drawer on route change
+  useEffect(() => {
+    onMobileClose?.();
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      {/* Desktop sidebar — always visible at md+ */}
+      <aside className="hidden md:flex h-screen w-56 flex-col border-r border-gray-200 bg-gray-50">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile sidebar — overlay drawer */}
+      <div
+        className={clsx(
+          "fixed inset-0 z-40 md:hidden transition-opacity duration-200",
+          mobileOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+        )}
+      >
+        {/* Backdrop */}
+        <div
+          className="absolute inset-0 bg-black/30"
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+
+        {/* Drawer panel */}
+        <aside
+          className={clsx(
+            "relative flex h-full w-64 max-w-[80vw] flex-col bg-gray-50 shadow-xl",
+            "transition-transform duration-200 ease-in-out",
+            mobileOpen ? "translate-x-0" : "-translate-x-full",
+          )}
+        >
+          {/* Close button */}
+          <button
+            onClick={onMobileClose}
+            className="absolute top-3 right-3 rounded-md p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+            aria-label="Close sidebar"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fillRule="evenodd"
+                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+
+          <SidebarContent onNavigate={onMobileClose} />
+        </aside>
+      </div>
+    </>
+  );
+}

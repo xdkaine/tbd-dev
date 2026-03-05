@@ -1,0 +1,17 @@
+# Grafana dashboard provisioning for TBD Platform
+# Auto-loads dashboards from JSON files on startup
+
+apiVersion: 1
+
+providers:
+  - name: "TBD Platform"
+    orgId: 1
+    folder: "TBD"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

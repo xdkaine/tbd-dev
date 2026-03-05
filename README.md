@@ -14,8 +14,8 @@ Role-based access control is enforced via Active Directory group membership.
 ## Goals
 - One-click deploys from GitHub with automatic preview environments.
 - Proxmox-native orchestration using LXC for fast startup and high density.
-- Segmented networking per project with VLAN-backed isolation.
-- AD-only authentication and auditable access.
+- Segmented networking per project with flat IP allocation or VLAN-backed isolation.
+- AD authentication with GitHub OAuth for repo access, and auditable access.
 - Clear operational workflows for staff oversight.
 
 ## Non-goals (v1)
@@ -27,10 +27,10 @@ Role-based access control is enforced via Active Directory group membership.
 ## Feature Scope
 ### MVP (LXC-first)
 - Repo connection via GitHub App/webhooks.
-- GitHub Actions-first build pipeline with artifact upload and commit status checks.
-- Self-hosted Actions runners inside the VPN.
+- Built-in build pipeline with automatic framework detection and Docker image generation.
+- GitHub OAuth for account linking and repo access.
 - Preview environments per PR and production deploys per main branch.
-- Per-project network segmentation and VLAN allocation.
+- Flat IP allocation (primary) with VLAN-backed network segmentation as fallback.
 - AD-based RBAC (Developer, Staff, Faculty).
 - Secrets management (encrypted at rest, scoped per project/env).
 - Logs, metrics, and audit trails.
@@ -49,131 +49,107 @@ Role-based access control is enforced via Active Directory group membership.
 - Advanced ingress and service mesh integrations.
 
 ## Architecture Overview
-TBD uses three planes to keep the platform maintainable and secure:
+TBD uses two planes to keep the platform maintainable and secure:
 
 1) Control Plane
 - Web UI + API
-- Auth/RBAC + audit
+- Built-in builder (framework detection, Dockerfile generation, docker build + push)
+- Auth/RBAC (AD + GitHub OAuth) + audit
 - Project, env, and policy management
 - Proxmox adapter + network allocator
+- Build coordinator + deploy queue
 
-2) Build Plane
-- GitHub Actions runners (self-hosted) triggered by webhooks
-- Build artifact storage (NFS)
-- Status reporting to GitHub Checks
-
-3) Runtime Plane (v1)
+2) Runtime Plane (v1)
 - LXC containers on Proxmox
-- Per-env VLAN tagging
-- NFS-backed volumes for persistent data
+- Flat IP allocation (primary) or per-env VLAN tagging (fallback)
+- Nginx ingress with dynamic per-deploy upstream configs
 
 ### Component Map (v1)
-- Web UI: developer-facing dashboard and staff/admin console
-- API Service: orchestration, policies, and workflow engine
+- Web UI: Next.js developer dashboard and staff/admin console
+- API Service: FastAPI orchestration, policies, and workflow engine
+- Built-in Builder: clones repos, detects frameworks, generates Dockerfiles, builds and pushes OCI images
 - Proxmox Adapter: LXC lifecycle, snapshots, and resource allocation
-- Build Coordinator: accepts GitHub Actions artifacts and triggers deploys
-- Network Service: VLAN allocation and subnet mapping
+- Build Coordinator: manages artifact records and triggers deploys
+- Network Allocator: flat IP allocation or VLAN/subnet mapping and IP reservation
 - Secrets Service: encrypted env vars and scoped access
-- Ingress/DNS Service: routes app traffic and manages wildcard records
-- Observability Stack: logs, metrics, and audit trails
+- Ingress/DNS Service: Nginx with dynamic upstream configs for `*.dev.sdc.cpp` routing
+- Observability Stack: Prometheus, Grafana, Loki + Promtail for logs, metrics, and audit trails
 
 ## Proxmox Integration (LXC First)
-- Workloads run as LXC containers on Proxmox hosts.
+- Workloads run as unprivileged LXC containers on Proxmox hosts.
 - Proxmox API manages container lifecycle, snapshots, and resource limits.
-- Each environment is mapped to a VLAN for network segmentation.
+- Containers are assigned flat IPs from a configurable range (primary), or VLAN-tagged IPs (fallback).
+- Bin-pack scheduler selects target nodes based on available CPU/RAM.
 - Fast provisioning enables preview environments per PR.
 
 ## Repository Integration and Deploy Flow
-GitHub is the primary integration point in v1.
+GitHub is the primary integration point.
 
-1) Developer connects GitHub repo.
-2) Webhook triggers GitHub Actions on push/PR.
-3) Actions runner builds via buildpacks or Dockerfile.
-4) Artifact is uploaded to the platform using a short-lived token.
+1) Developer connects GitHub repo via the platform UI.
+2) Webhook fires to the TBD API on push/PR.
+3) Built-in builder clones the repo, detects the framework, and builds a Docker image.
+4) Image is pushed to the internal registry.
 5) Platform posts build and deploy status back to GitHub.
-6) LXC is provisioned or updated.
+6) LXC is provisioned from the OCI image (skopeo + umoci + init script injection).
 7) Deploy is promoted on successful health checks.
 
-## Build and Deploy Strategy (Actions-first)
-- GitHub App installs webhooks and checks on connected repos.
-- Self-hosted Actions runners run inside the VPN with access to NFS and Proxmox.
-- Buildpacks are the default using `pack` with a standard builder image.
-- OCI images are pushed to an internal registry and tagged by commit SHA.
-- Platform pulls OCI images, unpacks to LXC rootfs, and deploys with systemd units.
-- Platform validates the artifact, deploys to LXC, and publishes preview URLs.
-
-### Example GitHub Actions Workflow (MVP)
-```yaml
-name: TBD Deploy
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  build-and-deploy:
-    runs-on: [self-hosted, tbd-runner]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build OCI image with buildpacks
-        run: |
-          pack build "$IMAGE" --builder paketobuildpacks/builder:base
-      - name: Push image to internal registry
-        run: |
-          docker push "$IMAGE"
-      - name: Trigger TBD deploy
-        run: |
-          curl -X POST "$TBD_API/deploys" \
-            -H "Authorization: Bearer $TBD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{"project":"my-app","env":"preview","image":"'"$IMAGE"'"}'
-```
-
-Environment variables used by the workflow:
-- `IMAGE` (e.g., `registry.sdc.cpp/tbd/my-app:${{ github.sha }}`)
-- `TBD_API` (platform API URL inside the VPN)
-- `TBD_TOKEN` (short-lived deploy token)
+## Build and Deploy Strategy (Built-in Builder)
+- GitHub App installs webhooks on connected repos.
+- The API includes a built-in builder that runs as a background task.
+- On webhook or manual trigger, the builder clones the repo, detects the framework, generates a Dockerfile (if none exists), and runs `docker build`.
+- Supported frameworks: Next.js, React (CRA/Vite), Python, Node.js, Go, static sites, and custom Dockerfiles.
+- OCI images are pushed to the internal registry and tagged by commit SHA + `latest`.
+- If `auto_deploy` is enabled on the project, the platform automatically triggers a deploy after a successful build.
+- Platform pulls OCI images, unpacks to LXC rootfs, injects an init script and secrets, and provisions a container.
+- Deploy URLs follow the pattern `<deployid>-<username>.dev.sdc.cpp`.
 
 ## Runtime Packaging Strategy
-- Default to buildpacks with auto-detection for common stacks.
-- Optional Dockerfile builds for advanced or custom needs.
+- Built-in builder auto-detects frameworks: Next.js, React, Python, Node.js, Go, static sites.
+- If the repo contains a Dockerfile, it is used directly.
+- Otherwise, a Dockerfile is generated from templates based on the detected framework.
+- Per-project overrides available for `install_command`, `build_command`, `output_directory`, and `root_directory`.
 - Runtime contract: bind to `$PORT`, emit logs to stdout/stderr, and expose a `/health` endpoint.
-- Secrets are injected as environment variables at runtime.
+- Secrets are injected as environment variables at runtime via `/etc/tbd/secrets.env`.
 - Artifact format is OCI image stored in the internal registry.
 
 ## OCI to LXC Conversion (v1)
-- Actions builds OCI images and pushes to the internal registry.
-- Platform pulls images, unpacks to a rootfs using OCI tools, and wires a systemd unit.
-- LXC containers boot from the unpacked rootfs and start the app service.
+- The built-in builder creates OCI images and pushes to the internal registry.
+- Platform pulls images, unpacks to a rootfs using OCI tools, and injects a custom `/sbin/init` script.
+- The init script replaces systemd (which Docker images lack) and handles networking, env vars, and app startup.
+- LXC containers boot from the prepared rootfs and run the app as PID 1.
 
-### OCI to LXC Runbook (Design)
+### OCI to LXC Runbook
 1) Pull image from registry using `skopeo` to an OCI layout.
 2) Unpack OCI layout to rootfs with `umoci`.
-3) Create/update LXC container with the rootfs path.
-4) Generate systemd unit to run the app command.
-5) Inject env vars, mount volumes, and apply VLAN tagging.
-6) Run `/health` checks and promote or rollback.
+3) Extract OCI config (CMD, ENV, EXPOSE, WorkingDir).
+4) Inject `/sbin/init` script into rootfs (networking, env vars, app exec).
+5) Inject secrets into `/etc/tbd/secrets.env`.
+6) Package rootfs into a `.tar.gz` template tarball.
+7) Upload template to Proxmox and create LXC container.
+8) Run `/health` checks and promote or rollback.
 
 ## Networking Model
-Network segmentation is per-project and VLAN-backed.
+The platform supports two networking modes:
 
-### Example
-- VLAN 1001 -> 172.16.1.0/25
-- VLAN 1025 -> 172.16.25.0/25
+### Flat IP Mode (Primary)
+- Containers are assigned IPs from a configurable flat range on the existing bridge.
+- The deploy executor scans existing TBD containers and picks the next unused IP.
+- No VLAN tagging is required; all containers share the same network segment.
 
-Rules:
-- Each project gets a dedicated VLAN.
+### VLAN Mode (Fallback)
+- Each project gets a dedicated VLAN for Layer 2 isolation.
+- VLAN tag maps to subnet: VLAN `1000+N` -> `172.16.N.0/25`.
 - Environments (preview/staging/prod) live inside the project VLAN.
-- Routing and upstream CIDR are controlled by infrastructure staff.
 
 ## DNS and Routing
-- Wildcard domain `*.sdc.cpp` points to the platform ingress inside the VPN.
-- Preview environments use `pr-<num>.<project>.sdc.cpp`.
-- Production uses `<project>.sdc.cpp`.
+- Wildcard domain `*.dev.sdc.cpp` points to the platform Nginx ingress inside the VPN.
+- All deploy URLs follow the pattern `<deployid>-<username>.dev.sdc.cpp` where `<deployid>` is the first 8 hex characters of the deploy UUID and `<username>` is the sanitized project owner username.
+- A single wildcard DNS record resolves all deploys without per-deploy DNS registration.
+- Nginx matches incoming requests against deploy hostnames and proxies to the corresponding LXC container IP.
 
 ## Authentication and Authorization
-- AD-only authentication via LDAP/Kerberos.
+- AD authentication via LDAP/Kerberos for platform login (JWT-based sessions).
+- GitHub OAuth for account linking and repo access (`/auth/github` flow).
 - Group-to-role mapping:
   - Developers -> Developer role
   - Staff -> Infrastructure role
@@ -200,13 +176,14 @@ Rules:
 
 ## Security and Isolation
 - Private-network first; HTTPS optional but supported.
-- VLAN segmentation per project.
+- Network isolation via flat IP segmentation (primary) or VLAN segmentation per project (fallback).
+- Per-project network policies for egress/ingress control.
 - Secrets encrypted at rest and injected at runtime.
 - RBAC enforced at API and UI layers.
 
 ## Operations
 - Backups: scheduled backups of platform metadata and NFS volumes.
-- Upgrades: rolling upgrades of control and build planes.
+- Upgrades: rolling upgrades of control and runtime planes.
 - Capacity: resource quotas per project and environment.
 - Incident response: audit logs + rollback tooling.
 
@@ -232,19 +209,21 @@ Recommended MVP path:
 - Quota enforcement: reject deploys that exceed project resource limits before provisioning.
 
 ## Network Egress Policy
-- Default deny: app VLANs cannot reach the internet or other VLANs by default.
-- Per-project exceptions: staff/faculty can approve outbound internet access per project.
+- Default deny: containers cannot reach the internet or other project networks by default.
+- Per-project network policies managed via `/admin/network-policies` API (direction, protocol, port, destination, allow/deny).
+- Staff/faculty can approve outbound internet access per project.
 - Allowed by default: NFS, internal DNS, platform API, and registry traffic.
 
 ## Technical Design Appendix (v1 LXC)
 ### Services
 - Web UI for developers and staff.
-- API Service for orchestration and policy enforcement.
+- API Service (FastAPI) for orchestration and policy enforcement.
+- Built-in Builder for repo cloning, framework detection, Dockerfile generation, and `docker build` + push.
 - Proxmox Adapter for LXC lifecycle and resource controls.
-- Build Coordinator for artifact intake and deploy triggering.
-- Network Allocator for VLAN/subnet mapping and IP reservation.
+- Build Coordinator for artifact records and deploy triggering.
+- Network Allocator for flat IP allocation (primary) or VLAN/subnet mapping and IP reservation.
 - Secrets Service for encrypted storage and scoped access.
-- Ingress/DNS Service for `*.sdc.cpp` routing.
+- Ingress/DNS Service for `*.dev.sdc.cpp` routing via Nginx.
 - Observability Stack for logs, metrics, and auditing.
 
 ### Data Model (core)
@@ -253,16 +232,21 @@ Recommended MVP path:
 - builds, artifacts, deploys
 - secrets, vlans, quotas
 - audit_log
+- network_policies
+- project_members
 
 ### Core APIs (examples)
-- `POST /integrations/github/install`
-- `POST /webhooks/github`
-- `GET/POST /projects`
+- `POST /auth/login` and `GET /auth/me`
+- `GET /auth/github` and `GET /auth/github/callback` (GitHub OAuth)
+- `POST /integrations/github/install` and `POST /integrations/github/webhook`
+- `GET/POST /projects` and `PATCH/DELETE /projects/{id}`
 - `GET/POST /projects/{id}/environments`
-- `POST /projects/{id}/deploys`
-- `POST /projects/{id}/secrets`
-- `POST /deploys/{id}/rollback`
-- `GET /networks/vlans`
+- `POST /projects/{id}/builds/trigger` and `POST /projects/{id}/builds/{id}/deploy`
+- `POST /projects/{id}/deploys` and `POST /deploys/{id}/rollback`
+- `GET/POST/DELETE /projects/{id}/secrets`
+- `GET /networks/vlans` and `POST /networks/vlans/reserve`
+- `GET/POST/PATCH/DELETE /admin/network-policies`
+- `GET /admin/stats` and `GET /admin/users`
 - `GET /audits`
 
 ### Deployment State Machine
@@ -277,19 +261,19 @@ Recommended MVP path:
 
 ### Proxmox Adapter (LXC)
 - Create/update LXC containers and apply resource limits.
-- Attach VLAN-tagged NICs per environment.
+- Attach flat IP (primary) or VLAN-tagged NICs per environment.
 - Mount NFS volumes and inject environment variables.
-- Generate systemd units for app startup and health checks.
+- Inject custom `/sbin/init` script for app startup and health checks (Docker images lack systemd).
 - Snapshot before deploy and rollback on failure.
 - Gate promotion on health checks.
 
 ### Network Allocator
-- Map VLAN to subnet based on staff-defined rules.
-- Reserve VLANs per project and allocate IPs per environment.
-- Register DNS entries under `*.sdc.cpp`.
+- Primary: allocate flat IPs from a configurable range (scans existing containers, picks next free IP).
+- Fallback: map VLAN to subnet based on staff-defined rules, reserve VLANs per project, allocate IPs per environment.
+- DNS resolved via wildcard `*.dev.sdc.cpp` record (no per-deploy registration needed).
 
 ### Security Model
-- AD-only authentication with group-to-role mapping.
+- AD authentication with GitHub OAuth for account linking and repo access.
 - API tokens scoped to project and environment.
 - Secrets encrypted at rest with audited access.
 - Full audit log for deploys, config changes, and admin actions.
@@ -301,57 +285,78 @@ Recommended MVP path:
 
 ### Operations
 - Backups for metadata DB and NFS volumes.
-- Rolling upgrades for control and build planes.
+- Rolling upgrades for control and runtime planes.
 - Quotas and alerts for capacity planning.
 
 ## Implementation Guide (Design-Only)
 ### Prerequisites
 - Proxmox cluster reachable from the control plane.
 - NFS share for artifacts and persistent volumes.
-- Internal DNS with wildcard `*.sdc.cpp`.
+- Internal DNS with wildcard `*.dev.sdc.cpp`.
 - AD/LDAP endpoints and group mappings.
+- GitHub App credentials for OAuth and webhook integration.
 
 ### Bootstrap Order
 1) Local OCI registry (`registry:2`) with NFS-backed storage.
-2) Self-hosted GitHub Actions runners inside the VPN.
-3) Control plane services (API, UI, build coordinator).
-4) Proxmox adapter with scoped API credentials.
-5) Networking allocator and Nginx ingress.
-6) AD auth and RBAC mapping.
-7) Secrets store and env injection.
-8) First deployment from GitHub.
+2) Control plane services (API with built-in builder, UI, build coordinator).
+3) Proxmox adapter with scoped API credentials.
+4) Networking allocator (flat IP range configuration) and Nginx ingress.
+5) AD auth, GitHub OAuth, and RBAC mapping.
+6) Secrets store and env injection.
+7) First deployment from GitHub.
 
-## API Contracts (Design-Only)
+## API Contracts
 ### Auth
 - `POST /auth/login`
 - `GET /auth/me`
+- `GET /auth/github` (start GitHub OAuth flow)
+- `GET /auth/github/callback`
+- `DELETE /auth/github/link`
+- `GET /auth/github/repos`
 
 ### GitHub Integration
 - `POST /integrations/github/install`
-- `POST /webhooks/github`
+- `GET /integrations/github/repos`
+- `POST /integrations/github/webhook`
+- `POST /projects/{id}/repo` (connect repo)
+- `DELETE /projects/{id}/repo` (disconnect repo)
 
 ### Projects
 - `GET /projects`
 - `POST /projects`
 - `GET /projects/{id}`
 - `PATCH /projects/{id}`
+- `DELETE /projects/{id}`
+
+### Members
+- `GET /users/search`
+- `GET /projects/{id}/members`
+- `POST /projects/{id}/members`
+- `DELETE /projects/{id}/members/{user_id}`
 
 ### Environments
 - `GET /projects/{id}/environments`
 - `POST /projects/{id}/environments`
+- `DELETE /projects/{id}/environments/{env_id}`
 
 ### Builds
-- `POST /projects/{id}/builds`
 - `GET /projects/{id}/builds`
+- `GET /projects/{id}/builds/{build_id}`
+- `GET /projects/{id}/builds/{build_id}/logs`
+- `GET /projects/{id}/builds/{build_id}/logs/stream` (SSE)
+- `POST /projects/{id}/builds`
+- `POST /projects/{id}/builds/trigger`
+- `POST /projects/{id}/builds/{build_id}/artifacts`
+- `POST /projects/{id}/builds/{build_id}/deploy`
 
 ### Deploys
-- `POST /projects/{id}/deploys`
 - `GET /projects/{id}/deploys`
+- `POST /projects/{id}/deploys`
+- `PATCH /deploys/{id}/status`
 - `POST /deploys/{id}/rollback`
-
-### Artifacts
-- `POST /artifacts`
-- `GET /artifacts/{id}`
+- `GET /projects/{id}/environments/{env_id}/queue`
+- `GET /projects/{id}/deploys/{deploy_id}/logs`
+- `GET /projects/{id}/deploys/{deploy_id}/logs/stream` (SSE)
 
 ### Secrets
 - `GET /projects/{id}/secrets`
@@ -361,55 +366,80 @@ Recommended MVP path:
 ### Networking
 - `GET /networks/vlans`
 - `POST /networks/vlans/reserve`
+- `GET /networks/vlans/{project_id}`
+- `DELETE /networks/vlans/{project_id}`
+
+### Admin
+- `GET /admin/stats`
+- `GET /admin/users`
+- `GET /admin/users/{user_id}`
+- `PATCH /admin/users/{user_id}/role`
+- `GET /admin/quotas`
+- `GET /admin/quotas/{project_id}`
+- `PATCH /admin/quotas/{project_id}`
+- `GET /admin/network-policies`
+- `POST /admin/network-policies`
+- `PATCH /admin/network-policies/{policy_id}`
+- `DELETE /admin/network-policies/{policy_id}`
 
 ### Audit
 - `GET /audits`
 
-## Database Schema (Design-Only)
-- `users` (id, username, display_name, email, ad_dn, created_at)
+### Health
+- `GET /health`
+- `GET /`
+
+## Database Schema
+- `users` (id, username, display_name, email, ad_dn, created_at, github_id, github_username, github_token)
 - `groups` (id, name, ad_dn)
 - `group_role_map` (id, group_id, role)
-- `projects` (id, name, slug, repo_url, owner_id, default_env, created_at)
-- `repos` (id, project_id, provider, repo_id, install_id)
+- `projects` (id, name, slug, repo_url, owner_id, default_env, created_at, auto_deploy, framework, root_directory, build_command, install_command, output_directory)
+- `repos` (id, project_id, provider, repo_id, install_id, repo_full_name, default_branch)
 - `environments` (id, project_id, name, type, vlan_id, created_at)
-- `builds` (id, project_id, commit_sha, image_ref, status, started_at, finished_at)
+- `builds` (id, project_id, commit_sha, image_ref, status, started_at, finished_at, trigger, branch, logs)
 - `artifacts` (id, build_id, image_ref, sha256, size, stored_at)
-- `deploys` (id, env_id, artifact_id, status, url, created_at, promoted_at)
+- `deploys` (id, env_id, artifact_id, status, url, created_at, promoted_at, logs)
 - `secrets` (id, project_id, scope, key, value_encrypted, created_at)
 - `vlans` (id, vlan_tag, subnet_cidr, reserved_by_project_id)
 - `quotas` (id, project_id, cpu_limit, ram_limit, disk_limit)
 - `audit_log` (id, actor_user_id, action, target_type, target_id, payload, created_at)
+- `network_policies` (id, project_id, name, direction, protocol, port, destination, action, enabled, created_at)
+- `project_members` (id, project_id, user_id, role, created_at)
+
+Alembic migration head: `009` (9 migrations total).
 
 ## Milestone Backlog
-### M0 Foundations
+### M0 Foundations -- COMPLETE
 - Stand up local `registry:2` with NFS storage.
-- Configure Nginx ingress for `*.sdc.cpp`.
-- Provision self-hosted GitHub Actions runners.
+- Configure Nginx ingress for `*.dev.sdc.cpp`.
+- Set up Docker-in-Docker build environment inside the API container.
 
-### M1 Control Plane MVP
-- API service with AD auth and RBAC.
+### M1 Control Plane MVP -- COMPLETE
+- API service with AD auth, GitHub OAuth, and RBAC.
 - Project and environment management.
 - Audit logging pipeline.
 
-### M2 Build and Deploy
+### M2 Build and Deploy -- COMPLETE
 - GitHub App + webhook receiver.
+- Built-in builder with framework detection and Dockerfile generation.
 - Build coordinator and deploy trigger.
 - GitHub Checks reporting.
 
-### M3 Runtime Plane
+### M3 Runtime Plane -- COMPLETE
 - OCI to LXC conversion using `skopeo` and `umoci`.
-- systemd unit generation for app startup.
+- Custom `/sbin/init` script injection for app startup (replaces systemd).
 - Health checks and rollback.
 
-### M4 Networking
-- VLAN allocator with subnet mapping.
-- DNS registration under `*.sdc.cpp`.
+### M4 Networking -- COMPLETE
+- Flat IP allocator (primary) with VLAN allocator as fallback.
+- DNS routing via wildcard `*.dev.sdc.cpp`.
+- Network policies API for per-project egress/ingress rules.
 
-### M5 Secrets and Observability
+### M5 Secrets and Observability -- COMPLETE
 - Encrypted secrets store with env injection.
 - Logs and metrics collection.
 
-### M6 UX
+### M6 UX -- COMPLETE
 - Web UI for projects, deploys, logs, and secrets.
 - Staff admin views for infrastructure controls.
 
@@ -429,9 +459,9 @@ Recommended MVP path:
 Detailed diagrams and workflow charts are available under `docs/`:
 
 - [Setup Guide](docs/setup.md) — step-by-step deployment and configuration instructions
-- [System Architecture](docs/architecture.md) — control, build, and runtime planes with component map
+- [System Architecture](docs/architecture.md) — control and runtime planes with component map
 - [Build and Deploy Flow](docs/build-deploy-flow.md) — end-to-end workflow from git push to running app
-- [OCI to LXC Conversion](docs/oci-lxc-conversion.md) — toolchain, steps, systemd unit template, and failure modes
+- [OCI to LXC Conversion](docs/oci-lxc-conversion.md) — toolchain, steps, init script injection, and failure modes
 - [Deploy State Machine](docs/deploy-state-machine.md) — state definitions, transitions, rollback behavior, and timeouts
 - [Network and DNS Layout](docs/network-dns.md) — VLAN allocation, subnet mapping, DNS routing, Nginx config, and firewall policy
 - [Milestone Timeline](docs/milestones.md) — phased delivery plan with Gantt chart, tickets, and dependency graph
@@ -443,7 +473,6 @@ See [Setup Guide](docs/setup.md) for step-by-step instructions covering:
 1. Environment configuration (`.env` file)
 2. Starting the platform (`docker compose up`)
 3. GitHub App creation and installation
-4. DNS setup (`*.sdc.cpp`)
+4. DNS setup (`*.dev.sdc.cpp`)
 5. First deploy (end-to-end test)
-6. Self-hosted Actions runners
-7. Verification and troubleshooting
+6. Verification and troubleshooting

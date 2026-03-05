@@ -1,0 +1,60 @@
+# TBD Platform — Development Docker Compose Override
+#
+# Usage: docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up -d
+#
+# Differences from production:
+# - API runs with uvicorn --reload for hot-reload
+# - Web runs with `next dev` instead of production build
+# - Source directories mounted as volumes for live editing
+# - Lower PostgreSQL resource settings
+# - Debug logging enabled
+
+version: "3.9"
+
+services:
+  # ---------- PostgreSQL (lighter config for dev) ----------
+  postgres:
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "effective_cache_size=512MB"
+      - "-c"
+      - "work_mem=16MB"
+      - "-c"
+      - "max_connections=50"
+      - "-c"
+      - "log_min_duration_statement=100"
+      - "-c"
+      - "log_statement=all"
+    shm_size: 256m
+
+  # ---------- API with hot-reload ----------
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    environment:
+      SECRET_KEY: dev-only-secret-key-minimum-32-characters-long
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:8000"
+      DATABASE_URL: postgresql+asyncpg://tbd:tbd_dev_password@postgres:5432/tbd
+    volumes:
+      - ../api/app:/app/app
+      - ../api/alembic:/app/alembic
+      - ../api/tests:/app/tests
+
+  # ---------- Web with Next.js dev server ----------
+  web:
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+    command: ["npm", "run", "dev"]
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:8000"
+    volumes:
+      - ../web/src:/app/src
+      - ../web/public:/app/public
+    ports:
+      - "3000:3000"

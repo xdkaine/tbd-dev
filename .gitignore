@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Database
+*.db
+
+# Docker
+infra/registry/data/
+infra/registry/auth/
+
+# Node (frontend)
+node_modules/
+.next/
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Alembic
+api/alembic/versions/__pycache__/
+
+# Logs
+*.log
+
+.agents
+skills-lock.json

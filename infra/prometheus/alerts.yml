@@ -1,0 +1,124 @@
+# TBD Platform — Prometheus Alerting Rules
+# Loaded by prometheus.yml via rule_files.
+
+groups:
+  - name: tbd-platform
+    rules:
+      # ------------------------------------------------------------------
+      # Service availability
+      # ------------------------------------------------------------------
+      - alert: APIDown
+        expr: up{job="tbd-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TBD API is down"
+          description: "The tbd-api target has been unreachable for more than 1 minute."
+
+      - alert: NginxDown
+        expr: up{job="nginx"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Nginx ingress is down"
+          description: "The nginx target has been unreachable for more than 2 minutes."
+
+      - alert: LokiDown
+        expr: up{job="loki"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki log aggregation is down"
+          description: "Loki has been unreachable for more than 5 minutes. Logs are not being collected."
+
+      # ------------------------------------------------------------------
+      # API performance
+      # ------------------------------------------------------------------
+      - alert: HighAPILatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="tbd-api"}[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency (p95 > 2s)"
+          description: "The 95th percentile API response time has exceeded 2 seconds for 5 minutes."
+
+      - alert: HighAPIErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="tbd-api", status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{job="tbd-api"}[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API error rate (>5% 5xx)"
+          description: "More than 5% of API requests are returning 5xx errors."
+
+      # ------------------------------------------------------------------
+      # Database
+      # ------------------------------------------------------------------
+      - alert: PostgresConnectionPoolExhausted
+        expr: |
+          pg_stat_activity_count{datname="tbd"}
+          / pg_settings_max_connections
+          > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connection pool >85% utilized"
+          description: "Database connections are approaching the max_connections limit."
+
+      # ------------------------------------------------------------------
+      # Build & Deploy pipeline
+      # ------------------------------------------------------------------
+      - alert: BuildQueueBacklog
+        expr: |
+          tbd_builds_pending_total > 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Build queue backlog >10 pending builds"
+          description: "There are more than 10 builds waiting in the queue for over 10 minutes."
+
+      - alert: DeployFailureSpike
+        expr: |
+          sum(increase(tbd_deploys_failed_total[30m])) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Deploy failure spike (>5 failures in 30m)"
+          description: "More than 5 deploy failures in the last 30 minutes."
+
+      # ------------------------------------------------------------------
+      # Disk / Storage
+      # ------------------------------------------------------------------
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.10
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space critically low (<10% free)"
+          description: "The root filesystem has less than 10% free space."
+
+      - alert: RegistryStorageHigh
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint=~".*registry.*"} / node_filesystem_size_bytes{mountpoint=~".*registry.*"}) < 0.15
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OCI registry storage running low (<15% free)"
+          description: "The registry storage volume is running low on space."

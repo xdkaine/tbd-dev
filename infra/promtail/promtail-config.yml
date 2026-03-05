@@ -1,0 +1,51 @@
+# Promtail configuration for TBD Platform
+# Collects logs from Docker containers and forwards to Loki
+#
+# In production, Promtail runs on each Proxmox host and collects
+# LXC journald logs. In the dev Docker setup, it collects Docker
+# container logs for the platform services.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Collect Docker container logs
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: tbd-platform
+          __path__: /var/log/docker/*log
+
+  # Collect Docker container logs via Docker socket
+  - job_name: docker-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Use container name as label
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(.*)"
+        target_label: "container"
+      # Use container label com.docker.compose.service as service name
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: "service"
+      # Add tbd project label if present
+      - source_labels: ["__meta_docker_container_label_tbd_project"]
+        target_label: "tbd_project"
+      # Add tbd environment label if present
+      - source_labels: ["__meta_docker_container_label_tbd_environment"]
+        target_label: "tbd_environment"
+    pipeline_stages:
+      - docker: {}
+      - timestamp:
+          source: time
+          format: RFC3339Nano
