@@ -6,108 +6,28 @@ How TBD converts OCI container images into running LXC containers on Proxmox.
 - **Developers**: understand why your app starts the way it does inside LXC.
 - **Staff/Faculty**: understand the toolchain and where to debug conversion failures.
 
-## ASCII Diagram
-
-```
- registry:2 (OCI image store)
-        |
-        | 1. skopeo copy
-        |    docker://registry.sdc.cpp/tbd/app:sha
-        |    oci:///tmp/oci-layout:latest
-        v
- +------------------+
- | OCI Layout       |
- | /tmp/oci-layout  |
- | - index.json     |
- | - blobs/         |
- | - oci-layout     |
- +------------------+
-        |
-        | 2. umoci unpack
-        |    --image /tmp/oci-layout:latest
-        |    --rootfs /tmp/rootfs
-        v
- +------------------+
- | Unpacked rootfs  |
- | /tmp/rootfs      |
- | - bin/           |
- | - etc/           |
- | - usr/           |
- | - app/           |  <-- application code + deps
- +------------------+
-        |
-        | 3. Extract OCI config
-        |    - CMD / ENTRYPOINT
-        |    - ENV vars
-        |    - EXPOSE port
-        v
- +------------------+
- | systemd unit     |
- | generation       |
- |                  |
- | [Unit]           |
- | Description=app  |
- | After=network    |
- |                  |
- | [Service]        |
- | ExecStart=<CMD>  |
- | Environment=     |
- |   PORT=<port>    |
- |   <secrets...>   |
- | Restart=always   |
- | WorkingDir=/app  |
- |                  |
- | [Install]        |
- | WantedBy=multi.. |
- +------------------+
-        |
-        | 4. Proxmox API
-        |    - create/update LXC
-        |    - set rootfs path
-        |    - attach VLAN NIC
-        |    - mount NFS volumes
-        v
- +------------------+
- | LXC Container    |
- | on Proxmox       |
- |                  |
- | rootfs: unpacked |
- | net0: VLAN tagged|
- | mp0: NFS mount   |
- | systemd: app.svc |
- +------------------+
-        |
-        | 5. Start container
-        | 6. systemctl start app
-        | 7. GET /health
-        v
- +------------------+
- | Running app      |
- | listening on     |
- | $PORT            |
- +------------------+
-```
-
 ## Mermaid Diagram
 
 ```mermaid
 flowchart TD
     REG[registry:2<br>OCI image] -->|"1. skopeo copy<br>docker:// → oci://"| OCI[OCI Layout<br>/tmp/oci-layout]
     OCI -->|"2. umoci unpack<br>--rootfs /tmp/rootfs"| ROOT[Unpacked rootfs<br>/tmp/rootfs]
-    ROOT -->|"3. Extract OCI config<br>CMD, ENV, EXPOSE"| UNIT[systemd unit<br>generation]
-    UNIT -->|"4. Proxmox API<br>create/update LXC"| LXC[LXC Container<br>rootfs + VLAN + NFS]
-    LXC -->|"5. Start container<br>6. systemctl start app"| RUN[Running App]
-    RUN -->|"7. GET /health"| HC{Health Check}
+    ROOT -->|"3. Extract OCI config<br>CMD, ENV, EXPOSE"| INIT[Init script injection<br>/sbin/init]
+    INIT -->|"4. Inject secrets<br>/etc/tbd/secrets.env"| SEC[Secrets injected<br>into rootfs]
+    SEC -->|"5. Create template tarball<br>.tar.gz for Proxmox"| TAR[CT Template<br>tbd-app-deadbeef.tar.gz]
+    TAR -->|"6. Upload to Proxmox<br>+ create LXC"| LXC[LXC Container<br>rootfs + network]
+    LXC -->|"7. Start container<br>init script runs app"| RUN[Running App]
+    RUN -->|"8. GET /health"| HC{Health Check}
     HC -->|pass| ACTIVE[Deploy Active]
     HC -->|fail| ROLL[Rollback to Snapshot]
 ```
 
 ## LXC Base Image and Container Model
-- Base rootfs: Ubuntu 22.04 LTS (minimal server image).
+- Base rootfs: the OCI image itself (no separate Ubuntu base template required).
 - Container type: unprivileged LXC (no root mapping to host).
-- Init system: systemd enabled inside the container.
-- App processes run as a non-root user (`tbd-app`, UID 1000).
-- The OCI rootfs is layered on top of the base image during unpack.
+- Init system: custom `/sbin/init` shell script injected by the platform (Docker/OCI images typically lack an init system).
+- The init script mounts pseudo-filesystems, configures networking, sets environment variables, and execs the app command as PID 1.
+- App processes run inside the unpacked OCI rootfs.
 
 ## Toolchain
 
@@ -115,48 +35,40 @@ flowchart TD
 |------|---------|---------|
 | `skopeo` | latest | Copy OCI images between registry and local layout |
 | `umoci` | latest | Unpack OCI layout to rootfs directory |
+| `docker` | 24+ | Build images from generated Dockerfiles |
 | Proxmox API | 7.x+ | LXC lifecycle management |
-| `systemd` | (in LXC) | App process management and restart |
 
-## systemd Unit Template
+## Init Script (replaces systemd)
 
-```ini
-[Unit]
-Description=TBD App - {project_name} ({env_name})
-After=network-online.target
-Wants=network-online.target
+Docker/OCI images do not include an init system. TBD injects a custom `/sbin/init` shell script into the unpacked rootfs that serves as PID 1 inside the LXC container.
 
-[Service]
-Type=simple
-ExecStart={entrypoint_cmd}
-WorkingDirectory={workdir}
-Restart=always
-RestartSec=5
+The init script performs these steps in order:
 
-# Injected by TBD platform
-Environment=PORT={port}
-Environment=NODE_ENV={env_type}
-EnvironmentFile=/etc/tbd/secrets.env
+1. **Mount pseudo-filesystems**: `/proc`, `/sys`, `/tmp`, `/run`, `/dev/pts`, `/dev/shm`
+2. **Set hostname**: `{project_slug}-{env_name}`
+3. **Configure networking**: bring up loopback, assign static IP to `eth0`, add default route, create `/etc/resolv.conf`
+4. **Set OCI environment variables**: all `ENV` vars from the Docker image
+5. **Set TBD platform variables**: `PORT`, `NODE_ENV`, `TBD_PROJECT`, `TBD_ENV`; sources `/etc/tbd/secrets.env`
+6. **Fix PATH**: ensures standard directories are included
+7. **Launch application**: `cd` to the OCI working directory, then `exec {cmd}` (app becomes PID 1)
 
-# Logging to stdout/stderr for collection
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=tbd-{project_name}
-
-[Install]
-WantedBy=multi-user.target
-```
+### Install Process
+- Creates `/etc/tbd/secrets.env` placeholder in the rootfs.
+- Handles symlinked `/sbin/init` (common in Docker images -- removes the symlink).
+- Backs up any existing `/sbin/init` as `/sbin/init.original`.
+- Creates minimal `/etc/passwd` and `/etc/group` if missing (some Docker images lack them).
+- Sets the init script as executable.
 
 ## Conversion Steps (detailed)
 
 ### Step 1: Pull image from registry
 ```bash
 skopeo copy \
-  docker://registry.sdc.cpp/tbd/my-app:abc123 \
+  docker://registry.dev.sdc.cpp/my-app:abc123 \
   oci:///var/lib/tbd/oci/my-app-abc123:latest
 ```
 - Pulls from internal `registry:2` over the VPN.
-- Stores as OCI layout on local disk (or NFS).
+- Stores as OCI layout on local disk.
 
 ### Step 2: Unpack to rootfs
 ```bash
@@ -172,31 +84,50 @@ umoci unpack \
 umoci stat --image /var/lib/tbd/oci/my-app-abc123:latest --json
 ```
 - Extracts `Cmd`, `Entrypoint`, `Env`, `ExposedPorts`, and `WorkingDir`.
-- Platform uses these to generate the systemd unit.
+- Platform uses these to generate the init script.
 
-### Step 4: Create/update LXC
+### Step 4: Inject init script
+- Generates a `/sbin/init` shell script from the OCI config and network parameters.
+- Installs it into the unpacked rootfs, backing up any existing `/sbin/init`.
+- Creates `/etc/tbd/secrets.env` placeholder and ensures `/etc/passwd` and `/etc/group` exist.
+
+### Step 5: Inject secrets
+- Writes encrypted secrets from the platform DB into `/etc/tbd/secrets.env` in the rootfs.
+- Non-fatal if secrets injection fails (container will start without secrets).
+
+### Step 6: Create template tarball
 ```bash
-# Via Proxmox API (simplified)
+tar -czf /tmp/tbd-my-app-abc12345.tar.gz -C /var/lib/tbd/rootfs/my-app-abc123 .
+```
+- Packages the prepared rootfs (with init script + secrets) into a `.tar.gz` file.
+- This tarball is used as a Proxmox CT template (ostemplate).
+
+### Step 7: Upload template and create LXC
+```bash
+# Upload tarball to Proxmox node
+POST /api2/json/nodes/{node}/storage/{storage}/upload
+
+# Create LXC from template
 POST /api2/json/nodes/{node}/lxc
 {
-  "ostemplate": "local:vztmpl/ubuntu-22.04-standard_amd64.tar.zst",
-  "rootfs": "local:/var/lib/tbd/rootfs/my-app-abc123",
-  "hostname": "my-app-preview-42",
+  "ostemplate": "{storage}:vztmpl/tbd-my-app-abc12345.tar.gz",
+  "hostname": "my-app-abc12345",
   "unprivileged": 1,
-  "net0": "name=eth0,bridge=vmbr0,tag=1001,ip=172.16.1.10/25,gw=172.16.1.1",
-  "mp0": "/mnt/nfs/my-app:/data,mp=/data",
+  "net0": "name=eth0,bridge=vmbr0,ip=10.128.30.80/24,gw=10.128.30.1",
   "cores": 2,
   "memory": 512
 }
 ```
+- Bin-pack scheduler selects the target Proxmox node based on available CPU/RAM.
+- If an existing LXC for this deploy exists, a snapshot is taken first for rollback.
 
-### Step 5: Start and verify
+### Step 8: Start and verify
 ```bash
 # Start container
 POST /api2/json/nodes/{node}/lxc/{vmid}/status/start
 
-# Health check (from platform)
-curl -sf http://172.16.1.10:{port}/health
+# Health check (from platform, 5 retries, 10s interval)
+curl -sf http://10.128.30.80:{port}/health
 ```
 
 ## Failure Modes
@@ -206,7 +137,11 @@ curl -sf http://172.16.1.10:{port}/health
 | Pull | Registry unreachable | Retry with backoff, alert staff |
 | Pull | Image not found | Mark deploy failed, notify developer |
 | Unpack | Corrupt layers | Mark deploy failed, log details |
+| Init script | Template error | Mark deploy failed, log details |
+| Secrets | Injection error | Non-fatal, container starts without secrets |
+| Tarball | Disk full or permission error | Mark deploy failed, alert staff |
+| Upload | Proxmox upload timeout (300s) | Mark deploy failed, alert staff |
 | LXC create | Proxmox API error | Mark deploy failed, alert staff |
 | LXC create | Resource quota exceeded | Mark deploy failed, notify developer |
 | Start | Service crash loop | Rollback to previous snapshot |
-| Health | Timeout or HTTP error | Rollback to previous snapshot |
+| Health | Timeout or HTTP error (60s total) | Rollback to previous snapshot |

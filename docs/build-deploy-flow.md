@@ -6,77 +6,6 @@ End-to-end workflow from code push to running application.
 - **Developers**: understand what happens after you push code.
 - **Staff/Faculty**: understand the pipeline stages and where failures occur.
 
-## ASCII Diagram
-
-```
- Developer pushes code
-        |
-        v
- +------------------+
- | GitHub Repo      |
- | (push / PR)      |
- +------------------+
-        |
-        |  1. Webhook fires to TBD API
-        |  2. GitHub Actions triggered
-        v
- +------------------+       +------------------+
- | TBD API          |       | Actions Runner   |
- | - create build   |       | (self-hosted)    |
- | - set status:    |       |                  |
- |   "pending"      |       | 3. Checkout code |
- +------------------+       | 4. Detect stack  |
-        |                   | 5. pack build    |
-        |                   |    (buildpack)   |
-        |                   | 6. docker push   |
-        |                   |    to registry   |
-        |                   +------------------+
-        |                          |
-        |    7. POST /deploys      |
-        |    {image_ref, sha}      |
-        |<-------------------------+
-        |
-        v
- +------------------+
- | Build Coordinator|
- | - validate image |
- | - resolve env    |
- | - allocate VLAN  |
- +------------------+
-        |
-        |  8. Pull OCI image (skopeo)
-        |  9. Unpack rootfs (umoci)
-        | 10. Generate systemd unit
-        v
- +------------------+
- | Proxmox Adapter  |
- | - create/update  |
- |   LXC container  |
- | - attach VLAN    |
- | - mount NFS      |
- | - inject secrets |
- | - start service  |
- +------------------+
-        |
-        | 11. Health check: GET /health
-        v
- +------------------+       +------------------+
- | Health Check     |--OK-->| Promote deploy   |
- | (HTTP /health)   |       | - update DNS     |
- |                  |       | - report success |
- |                  |       |   to GitHub      |
- +------------------+       +------------------+
-        |
-        | FAIL
-        v
- +------------------+
- | Rollback         |
- | - restore snap   |
- | - report failure |
- |   to GitHub      |
- +------------------+
-```
-
 ## Mermaid Diagram
 
 ```mermaid
@@ -84,7 +13,7 @@ sequenceDiagram
     participant Dev as Developer
     participant GH as GitHub
     participant API as TBD API
-    participant GHA as Actions Runner
+    participant BLD as Built-in Builder
     participant REG as registry:2
     participant BC as Build Coordinator
     participant PVE as Proxmox Adapter
@@ -95,40 +24,43 @@ sequenceDiagram
     GH->>API: webhook (push/PR event)
     API->>API: create build record (status: pending)
     API->>GH: set commit status "pending"
-    GH->>GHA: trigger Actions workflow
+    API->>BLD: trigger build (background task)
 
-    GHA->>GHA: checkout code
-    GHA->>GHA: detect stack (buildpack)
-    GHA->>GHA: pack build (OCI image)
-    GHA->>REG: docker push image
+    BLD->>GH: git clone repo (OAuth token)
+    BLD->>BLD: detect framework
+    BLD->>BLD: generate Dockerfile (if needed)
+    BLD->>BLD: docker build
+    BLD->>REG: docker push image (SHA + latest tags)
+    BLD->>API: create artifact record
 
-    GHA->>API: POST /deploys {image_ref, sha}
-    API->>BC: trigger deploy
+    alt Auto-deploy enabled
+        BLD->>BC: trigger deploy
+        BC->>REG: pull OCI image (skopeo)
+        BC->>BC: unpack rootfs (umoci)
+        BC->>BC: inject init script + secrets
+        BC->>BC: create template tarball
+        BC->>PVE: select node (bin-pack scheduler)
+        BC->>PVE: upload template + create LXC
 
-    BC->>REG: pull OCI image (skopeo)
-    BC->>BC: unpack rootfs (umoci)
-    BC->>BC: generate systemd unit
-    BC->>PVE: create/update LXC container
+        PVE->>LXC: provision container
+        PVE->>LXC: assign flat IP + configure network
+        PVE->>LXC: start container
 
-    PVE->>LXC: provision container
-    PVE->>LXC: attach VLAN + mount NFS
-    PVE->>LXC: inject env vars + secrets
-    PVE->>LXC: start systemd service
+        LXC-->>PVE: service running
+        PVE->>LXC: GET /health (5 retries, 10s interval)
 
-    LXC-->>PVE: service running
-    PVE->>LXC: GET /health
-
-    alt Health check passes
-        PVE->>API: deploy healthy
-        API->>NGX: update routing config
-        NGX->>NGX: route *.sdc.cpp to LXC
-        API->>GH: set commit status "success"
-        API->>API: status: active
-    else Health check fails
-        PVE->>PVE: restore snapshot
-        PVE->>API: deploy failed
-        API->>GH: set commit status "failure"
-        API->>API: status: rolled_back
+        alt Health check passes
+            PVE->>API: deploy healthy
+            API->>NGX: write upstream config + reload
+            NGX->>NGX: route *.dev.sdc.cpp to LXC
+            API->>GH: set commit status "success"
+            API->>API: status: active
+        else Health check fails
+            PVE->>PVE: restore snapshot
+            PVE->>API: deploy failed
+            API->>GH: set commit status "failure"
+            API->>API: status: rolled_back
+        end
     end
 ```
 
@@ -138,24 +70,27 @@ sequenceDiagram
 |------|-------|--------|-------------|
 | 1 | GitHub | Fires webhook to TBD API | API unreachable: retry with backoff |
 | 2 | TBD API | Creates build record, sets pending status | DB write fail: return 500 to webhook |
-| 3 | Actions Runner | Checks out code | Checkout fail: Actions reports error |
-| 4 | Actions Runner | Detects runtime stack | Unknown stack: fail build with message |
-| 5 | Actions Runner | Builds OCI image with `pack` | Build error: fail with logs |
-| 6 | Actions Runner | Pushes image to registry | Registry down: retry, then fail |
-| 7 | Actions Runner | Calls `POST /deploys` on TBD API | API reject: fail Actions step |
-| 8 | Build Coordinator | Pulls image from registry | Pull fail: mark deploy failed |
-| 9 | Build Coordinator | Unpacks OCI to rootfs | Corrupt image: mark deploy failed |
-| 10 | Build Coordinator | Generates systemd unit | Template error: mark deploy failed |
-| 11 | Proxmox Adapter | Creates/updates LXC, starts service | Proxmox API error: mark deploy failed |
-| 12 | Proxmox Adapter | Runs HTTP health check | Timeout/error: rollback to snapshot |
-| 13 | TBD API | Updates DNS routing via Nginx | Config reload fail: alert staff |
-| 14 | TBD API | Reports status back to GitHub | GitHub API error: log and retry |
+| 3 | Built-in Builder | Clones repo using OAuth token | Clone fail: mark build failed |
+| 4 | Built-in Builder | Detects runtime framework | Unknown framework: mark as `unknown`, attempt generic build |
+| 5 | Built-in Builder | Generates Dockerfile (if no Dockerfile in repo) | Template error: mark build failed |
+| 6 | Built-in Builder | Builds OCI image with `docker build` | Build error: mark build failed with logs |
+| 7 | Built-in Builder | Pushes image to registry (SHA + latest tags) | Registry down: retry, then fail |
+| 8 | Built-in Builder | Creates artifact record in DB | DB error: mark build failed |
+| 9 | Deploy Executor | Pulls image from registry with skopeo | Pull fail: mark deploy failed |
+| 10 | Deploy Executor | Unpacks OCI to rootfs with umoci | Corrupt image: mark deploy failed |
+| 11 | Deploy Executor | Injects init script and secrets into rootfs | Template error: mark deploy failed |
+| 12 | Deploy Executor | Creates template tarball for Proxmox | Disk full: mark deploy failed |
+| 13 | Deploy Executor | Selects node (bin-pack scheduler) and uploads template | Proxmox API error: mark deploy failed |
+| 14 | Deploy Executor | Creates/starts LXC container | Proxmox API error: mark deploy failed |
+| 15 | Deploy Executor | Runs HTTP health check (5 retries, 10s interval) | Timeout/error: rollback to snapshot |
+| 16 | TBD API | Writes Nginx upstream config and triggers reload | Config reload fail: alert staff |
+| 17 | TBD API | Reports status back to GitHub | GitHub API error: log and retry |
 
 ## Preview Environment Flow
 
 For pull requests, the flow is identical except:
 - Environment type is `preview` instead of `production`.
-- DNS entry is `pr-<num>.<project>.sdc.cpp`.
+- DNS entry is `<deployid>-<username>.dev.sdc.cpp`.
 - LXC is destroyed when the PR is closed or merged.
 - GitHub check includes the preview URL as a detail link.
 
@@ -163,6 +98,6 @@ For pull requests, the flow is identical except:
 
 For pushes to `main`:
 - Environment type is `production`.
-- DNS entry is `<project>.sdc.cpp`.
+- DNS entry is `<deployid>-<username>.dev.sdc.cpp`.
 - Snapshot is taken before deploy for rollback safety.
 - Old LXC is kept until the new one passes health checks.

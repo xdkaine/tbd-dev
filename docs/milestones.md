@@ -6,28 +6,6 @@ Phased delivery plan for TBD, from foundations through Kubernetes adoption.
 - **Developers**: understand when features become available.
 - **Staff/Faculty**: understand infrastructure work, dependencies, and capacity planning.
 
-## ASCII Timeline
-
-```
- Week   1    2    3    4    5    6    7    8    9   10   11   12   13   14
-       |----|----|----|----|----|----|----|----|----|----|----|----|----|----|
-  M0   [==========]
-  M1              [===============]
-  M2                        [===============]
-  M3                                  [===============]
-  M4                                            [==========]
-  M5                                                  [==========]
-  M6                                                        [===============]
-
-  M0: Foundations (registry, runners, Nginx)
-  M1: Control Plane MVP (API, auth, RBAC, projects)
-  M2: Build & Deploy (GitHub App, coordinator, checks)
-  M3: Runtime Plane (OCI→LXC, systemd, health checks)
-  M4: Networking (VLAN allocator, DNS registration)
-  M5: Secrets & Observability (encrypted store, logs, metrics)
-  M6: UX (Web UI for developers and staff)
-```
-
 ## Mermaid Gantt Chart
 
 ```mermaid
@@ -39,8 +17,8 @@ gantt
     section M0 Foundations
     Stand up registry:2 on NFS           :m0a, 2026-03-09, 3d
     Registry basic auth + GC policy      :m0a2, after m0a, 2d
-    Configure Nginx ingress *.sdc.cpp    :m0b, after m0a, 3d
-    Provision self-hosted Actions runners :m0c, after m0a, 4d
+    Configure Nginx ingress *.dev.sdc.cpp :m0b, after m0a, 3d
+    Set up build environment (DinD)      :m0c, after m0a, 4d
     Validate end-to-end connectivity     :m0d, after m0c, 2d
 
     section M1 Control Plane MVP
@@ -56,18 +34,17 @@ gantt
     Deploy trigger and queue             :m2d, after m2b, 3d
 
     section M3 Runtime Plane
-    Ubuntu 22.04 LXC base template       :m3pre, after m2d, 2d
-    OCI pull + rootfs unpack pipeline    :m3a, after m3pre, 5d
-    systemd unit generation              :m3b, after m3a, 3d
+    OCI pull + rootfs unpack pipeline    :m3a, after m2d, 5d
+    Init script injection (replaces systemd) :m3b, after m3a, 3d
     LXC provisioning via Proxmox API     :m3c, after m3b, 4d
     Bin-pack scheduler + node health     :m3s, after m3c, 3d
     Health checks + auto-rollback        :m3d, after m3c, 3d
 
     section M4 Networking
-    VLAN allocator + subnet mapping      :m4a, after m3c, 4d
+    Flat IP allocator + VLAN fallback    :m4a, after m3c, 4d
     IP reservation per environment       :m4b, after m4a, 3d
-    DNS registration under *.sdc.cpp     :m4c, after m4b, 3d
-    Default-deny egress + exception flow :m4d, after m4b, 3d
+    DNS routing via wildcard *.dev.sdc.cpp :m4c, after m4b, 3d
+    Network policies + egress rules      :m4d, after m4b, 3d
 
     section M5 Secrets and Observability
     Encrypted secrets store              :m5a, after m4b, 4d
@@ -84,22 +61,22 @@ gantt
 
 ## Milestone Details
 
-### M0: Foundations (Weeks 1-2)
+### M0: Foundations (Weeks 1-2) -- COMPLETE
 **Goal**: infrastructure prerequisites are operational.
 
 | Ticket | Description | Depends On | Est |
 |--------|-------------|-----------|-----|
 | M0-1 | Deploy `registry:2` container with NFS-backed storage | NFS share | 3d |
 | M0-2 | Configure basic auth (htpasswd) and weekly GC for registry | M0-1 | 2d |
-| M0-3 | Configure Nginx for wildcard `*.sdc.cpp` | DNS record | 3d |
-| M0-4 | Install and register self-hosted Actions runners | VPN access | 4d |
-| M0-5 | Validate: push image to registry, pull from runner | M0-1, M0-4 | 2d |
+| M0-3 | Configure Nginx for wildcard `*.dev.sdc.cpp` | DNS record | 3d |
+| M0-4 | Set up Docker-in-Docker build environment in API container | M0-1 | 4d |
+| M0-5 | Validate: build image, push to registry, verify routing | M0-1, M0-4 | 2d |
 
-**Exit criteria**: Actions runner can build an image, push to registry with auth, and Nginx resolves `*.sdc.cpp`.
+**Exit criteria**: Built-in builder can build an image, push to registry with auth, and Nginx resolves `*.dev.sdc.cpp`.
 
 ---
 
-### M1: Control Plane MVP (Weeks 2-4)
+### M1: Control Plane MVP (Weeks 2-4) -- COMPLETE
 **Goal**: API service handles auth, projects, and audit.
 
 | Ticket | Description | Depends On | Est |
@@ -113,7 +90,7 @@ gantt
 
 ---
 
-### M2: Build and Deploy (Weeks 4-6)
+### M2: Build and Deploy (Weeks 4-6) -- COMPLETE
 **Goal**: GitHub integration triggers builds and reports status.
 
 | Ticket | Description | Depends On | Est |
@@ -127,14 +104,14 @@ gantt
 
 ---
 
-### M3: Runtime Plane (Weeks 6-8)
+### M3: Runtime Plane (Weeks 6-8) -- COMPLETE
 **Goal**: OCI images are converted and running as LXC containers.
 
 | Ticket | Description | Depends On | Est |
 |--------|-------------|-----------|-----|
-| M3-0 | Prepare Ubuntu 22.04 LXC base template (unprivileged, systemd) | Proxmox access | 2d |
+| M3-0 | (Not needed — OCI images used directly as rootfs source) | — | — |
 | M3-1 | OCI pull (skopeo) + rootfs unpack (umoci) pipeline | M0-1, M2-2 | 5d |
-| M3-2 | systemd unit generation from OCI config | M3-1 | 3d |
+| M3-2 | Custom `/sbin/init` script injection from OCI config | M3-1 | 3d |
 | M3-3 | LXC create/update via Proxmox API (unprivileged) | M3-2 | 4d |
 | M3-4 | Bin-pack scheduler with node health checks and drain | M3-3 | 3d |
 | M3-5 | HTTP health check + auto-rollback on failure | M3-3 | 3d |
@@ -143,21 +120,21 @@ gantt
 
 ---
 
-### M4: Networking (Weeks 8-10)
-**Goal**: projects get isolated VLANs and routable DNS.
+### M4: Networking (Weeks 8-10) -- COMPLETE
+**Goal**: projects get routable IPs and DNS.
 
 | Ticket | Description | Depends On | Est |
 |--------|-------------|-----------|-----|
-| M4-1 | VLAN allocator with tag-to-subnet mapping | M1-3 | 4d |
+| M4-1 | Flat IP allocator with configurable range (primary) and VLAN fallback | M1-3 | 4d |
 | M4-2 | IP reservation per environment | M4-1 | 3d |
-| M4-3 | DNS registration + Nginx upstream update | M4-2, M0-3 | 3d |
-| M4-4 | Default-deny egress rules + per-project exception flow | M4-2 | 3d |
+| M4-3 | DNS routing via wildcard `*.dev.sdc.cpp` + Nginx upstream update | M4-2, M0-3 | 3d |
+| M4-4 | Network policies API + per-project egress/ingress rules | M4-2 | 3d |
 
-**Exit criteria**: new project gets a VLAN, preview env gets a routable URL, egress is blocked by default.
+**Exit criteria**: new project gets a flat IP, deploy gets a routable URL under `*.dev.sdc.cpp`, egress is controlled by policies.
 
 ---
 
-### M5: Secrets and Observability (Weeks 9-11)
+### M5: Secrets and Observability (Weeks 9-11) -- COMPLETE
 **Goal**: secrets are secure and logs/metrics are collected.
 
 | Ticket | Description | Depends On | Est |
@@ -171,7 +148,7 @@ gantt
 
 ---
 
-### M6: UX (Weeks 11-14)
+### M6: UX (Weeks 11-14) -- COMPLETE
 **Goal**: developers and staff have a usable web interface.
 
 | Ticket | Description | Depends On | Est |

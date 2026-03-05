@@ -108,7 +108,7 @@ docker run --rm --entrypoint htpasswd httpd:2 -Bbn tbd registry-password \
   > infra/registry/auth/htpasswd
 ```
 
-Replace `registry-password` with a real password. The `tbd` user is what the Actions runner and API use to push/pull images.
+Replace `registry-password` with a real password. The `tbd` user is what the built-in builder and API use to push/pull images.
 
 ### 2b. Start Docker Compose
 
@@ -123,7 +123,7 @@ This starts the following services:
 |---|---|---|
 | `postgres` | 5432 | PostgreSQL 16 database |
 | `registry` | 5000 | OCI image registry (registry:2) |
-| `nginx` | 80 | Wildcard ingress for `*.*.dev.sdc.cpp` |
+| `nginx` | 80 | Wildcard ingress for `*.dev.sdc.cpp` |
 | `api` | 8000 | TBD Control Plane API (FastAPI) |
 | `web` | 3000 | Next.js developer dashboard |
 | `loki` | 3100 | Log aggregation |
@@ -159,6 +159,13 @@ You should see output like:
 ```
 INFO  [alembic.runtime.migration] Running upgrade  -> 001, Initial schema
 INFO  [alembic.runtime.migration] Running upgrade 001 -> 002, Add repo fields
+INFO  [alembic.runtime.migration] Running upgrade 002 -> 003, Add build pipeline fields
+INFO  [alembic.runtime.migration] Running upgrade 003 -> 004, Add GitHub user fields
+INFO  [alembic.runtime.migration] Running upgrade 004 -> 005, Add GitHub token
+INFO  [alembic.runtime.migration] Running upgrade 005 -> 006, Add build settings
+INFO  [alembic.runtime.migration] Running upgrade 006 -> 007, Add network policies
+INFO  [alembic.runtime.migration] Running upgrade 007 -> 008, Add deploy logs
+INFO  [alembic.runtime.migration] Running upgrade 008 -> 009, Add project members
 ```
 
 ### 2d. Verify the API
@@ -291,12 +298,12 @@ curl -s https://api.github.com/repos/your-org/your-repo | jq '.id'
 
 ## 4. DNS Setup
 
-The platform uses a double-wildcard DNS pattern under `*.*.dev.sdc.cpp` (configurable via the `DEPLOY_DOMAIN_SUFFIX` env var).
+The platform uses a wildcard DNS pattern under `*.dev.sdc.cpp` (configurable via the `DEPLOY_DOMAIN_SUFFIX` env var).
 
 - **Platform UI**: `dev.sdc.cpp`
 - **Platform API**: `api.dev.sdc.cpp`
 - **Registry**: `registry.dev.sdc.cpp`
-- **Deploys**: `<deployid>.<username>.dev.sdc.cpp`
+- **Deploys**: `<deployid>-<username>.dev.sdc.cpp`
 
 ### Local Development (hosts file)
 
@@ -314,129 +321,70 @@ You will need to add entries for each deploy you want to test locally. The forma
 
 ### Production (Internal DNS)
 
-Configure your internal DNS server with a double-wildcard A record:
+Configure your internal DNS server with a wildcard A record:
 
 ```
-*.*.dev.sdc.cpp.  300  IN  A  <nginx-server-ip>
-dev.sdc.cpp.      300  IN  A  <nginx-server-ip>
+*.dev.sdc.cpp.  300  IN  A  <nginx-server-ip>
+dev.sdc.cpp.    300  IN  A  <nginx-server-ip>
 ```
 
-The first record routes all deploy traffic (`<deployid>.<username>.dev.sdc.cpp`) to the Nginx ingress. The second routes the platform UI itself. Sub-domains like `api.dev.sdc.cpp` and `registry.dev.sdc.cpp` are also matched by the second record (or you can add explicit A records for them).
-
-> **Note:** Not all DNS servers support double-wildcard records (`*.*.`). BIND 9, PowerDNS, and Windows DNS all support it. If yours does not, you'll need to add explicit records per user (`*.jsmith.dev.sdc.cpp`).
+The first record routes all deploy traffic (`<deployid>-<username>.dev.sdc.cpp`) to the Nginx ingress. The second routes the platform UI itself. Sub-domains like `api.dev.sdc.cpp` and `registry.dev.sdc.cpp` are also matched by the wildcard (or you can add explicit A records for them).
 
 ## 5. First Deploy (End-to-End Test)
 
 Once the platform, GitHub App, and DNS are configured, test the full pipeline:
 
-### 5a. Add the GitHub Actions Workflow to Your Repo
+### 5a. Connect a Repository
 
-Create `.github/workflows/tbd-deploy.yml` in the connected repository:
+1. In the TBD web UI, create a new project.
+2. Link a GitHub repository using the GitHub integration (`POST /projects/{id}/repo`).
+3. Optionally configure framework, build commands, and auto-deploy settings.
 
-```yaml
-name: TBD Deploy
+### 5b. Trigger a Build
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-env:
-  REGISTRY: registry.dev.sdc.cpp:5000
-  IMAGE: registry.dev.sdc.cpp:5000/tbd/${{ github.event.repository.name }}:${{ github.sha }}
-  TBD_API: http://api.dev.sdc.cpp
-
-jobs:
-  build-and-deploy:
-    runs-on: [self-hosted, tbd-runner]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build OCI image
-        run: |
-          pack build "$IMAGE" --builder paketobuildpacks/builder:base
-
-      - name: Login to registry
-        run: |
-          echo "${{ secrets.REGISTRY_PASSWORD }}" | \
-            docker login "$REGISTRY" -u tbd --password-stdin
-
-      - name: Push image
-        run: docker push "$IMAGE"
-
-      - name: Record artifact
-        run: |
-          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
-          SIZE=$(docker image inspect "$IMAGE" --format='{{.Size}}')
-          BUILD_ID="${{ steps.create-build.outputs.build_id }}"
-
-          curl -sf -X POST "$TBD_API/projects/$PROJECT_ID/builds/$BUILD_ID/artifacts" \
-            -H "Authorization: Bearer ${{ secrets.TBD_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"image_ref\": \"$IMAGE\",
-              \"sha256\": \"$DIGEST\",
-              \"size\": $SIZE
-            }"
-
-      - name: Trigger deploy
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            ENV="pr-${{ github.event.number }}"
-          else
-            ENV="production"
-          fi
-
-          curl -sf -X POST "$TBD_API/projects/$PROJECT_ID/builds/$BUILD_ID/deploy" \
-            -H "Authorization: Bearer ${{ secrets.TBD_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"env\": \"$ENV\"}"
-```
-
-### 5b. Set Repository Secrets
-
-In your GitHub repo settings (Settings > Secrets and variables > Actions), add:
-
-| Secret | Value |
-|---|---|
-| `TBD_TOKEN` | A valid JWT token (or a service account token) |
-| `REGISTRY_PASSWORD` | The htpasswd password from step 2a |
-
-### 5c. Push and Watch
-
-Push a commit to `main`. You should see:
+Push a commit to the connected repo's default branch (or open a PR). You should see:
 
 1. GitHub webhook fires to the TBD API.
 2. TBD creates a build record and posts a "pending" commit status to GitHub.
-3. GitHub Actions runs the workflow on the self-hosted runner.
-4. The runner builds the image, pushes to the registry, and calls the TBD API.
-5. TBD records the artifact and enqueues a deploy.
-6. (M3+) The runtime plane provisions an LXC container and promotes the deploy.
+3. The built-in builder clones the repo, detects the framework, and generates a Dockerfile.
+4. `docker build` runs inside the API container and the image is pushed to the registry.
+5. TBD records the artifact and enqueues a deploy (if `auto_deploy` is enabled).
+6. The runtime plane provisions an LXC container and promotes the deploy.
 7. TBD posts a "success" commit status to GitHub.
 
-Until M3 (Runtime Plane) is implemented, deploys will stay in `building` state. The build record, artifact, and deploy queue are all functional.
-
-## 6. Self-Hosted Actions Runners
-
-The build pipeline requires GitHub Actions runners inside your network (VPN) with access to the registry and Proxmox hosts.
-
-### Install a Runner
-
-Follow the GitHub docs: [Adding self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/adding-self-hosted-runners)
-
-Requirements for the runner machine:
-- Docker installed and running
-- `pack` CLI installed ([Cloud Native Buildpacks](https://buildpacks.io/docs/tools/pack/))
-- Network access to `registry.dev.sdc.cpp:5000` and `api.dev.sdc.cpp`
-- Labels: `self-hosted`, `tbd-runner`
-
-### Runner as a Service (systemd)
+You can also trigger a build manually via:
 
 ```bash
-cd actions-runner
-sudo ./svc.sh install
-sudo ./svc.sh start
+curl -sf -X POST "http://localhost:8000/projects/$PROJECT_ID/builds/trigger" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"branch": "main"}'
 ```
+
+### 5c. Verify the Deploy
+
+Once the deploy reaches `active` state, access it at its assigned URL:
+
+```bash
+curl -s https://<deployid>-<username>.dev.sdc.cpp/health
+```
+
+The deploy URL is returned in the deploy record (`GET /projects/{id}/deploys`).
+
+## 6. Built-in Builder
+
+The build pipeline uses a built-in builder that runs inside the API container. No external GitHub Actions runners or buildpack CLIs are required.
+
+The builder automatically:
+- Clones the connected repo on webhook or manual trigger
+- Detects the framework (Next.js, React, Python, Node.js, Go, static, Dockerfile)
+- Generates a Dockerfile if none exists
+- Runs `docker build` and pushes the image to the internal registry
+
+Requirements for the API container:
+- Docker socket mounted (Docker-in-Docker via `/var/run/docker.sock`)
+- Network access to `registry.dev.sdc.cpp:5000`
+- GitHub App credentials configured in `.env`
 
 ## 7. Verifying the Stack
 
@@ -455,11 +403,11 @@ curl -s -u tbd:registry-password http://localhost:5000/v2/ | jq .
 
 # 4. Database tables exist
 docker exec tbd-postgres psql -U tbd -c "\dt"
-# Expected: 13 tables listed
+# Expected: 15 tables listed
 
 # 5. Alembic migration status
 docker exec tbd-api alembic current
-# Expected: 002 (head)
+# Expected: 009 (head)
 
 # 6. Nginx routing
 curl -s -H "Host: api.dev.sdc.cpp" http://localhost/health | jq .
@@ -523,32 +471,14 @@ docker exec tbd-api alembic upgrade head
 
 ## 9. Architecture Reference
 
-```
-                     +-----------+
-                     |  GitHub   |
-                     +-----+-----+
-                           |
-                    webhooks + API
-                           |
-+------+    +------+-------+-------+------+
-| Nginx|<-->|          TBD API            |
-| :80  |    |          :8000              |
-+------+    +---+--------+----------+-----+
-                |        |          |
-          +-----+--+ +---+----+ +--+------+
-          |Postgres| |Registry| |  Proxmox|
-          |  :5432 | | :5000  | |  (LXC)  |
-          +--------+ +--------+ +---------+
-```
-
 Domains (default suffix: `dev.sdc.cpp`):
 - `dev.sdc.cpp` -> Nginx -> Web UI (:3000)
 - `api.dev.sdc.cpp` -> Nginx -> API (:8000)
 - `registry.dev.sdc.cpp` -> Nginx -> Registry (:5000)
-- `<deployid>.<username>.dev.sdc.cpp` -> Nginx -> LXC container
+- `<deployid>-<username>.dev.sdc.cpp` -> Nginx -> LXC container
 
 Requests flow:
-1. `*.*.dev.sdc.cpp` -> Nginx -> LXC containers (per-deploy routing)
+1. `*.dev.sdc.cpp` -> Nginx -> LXC containers (per-deploy routing)
 2. GitHub webhooks -> API -> build records + commit statuses
-3. Actions runner -> registry (push image) -> API (record artifact, trigger deploy)
+3. API built-in builder -> registry (push image) -> record artifact, trigger deploy
 4. API -> Proxmox (provision LXC) -> health check -> promote
