@@ -8,6 +8,6 @@ RUN CGO_ENABLED=0 go build -o server .
 FROM alpine:3.19
 WORKDIR /app
 COPY --from=builder /app/server .
-ENV PORT=8080
-EXPOSE 8080
+ENV PORT=3000
+EXPOSE 3000
 CMD ["./server"]
