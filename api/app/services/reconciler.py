@@ -203,7 +203,7 @@ async def _reconcile_ghost_active_deploys(db: AsyncSession) -> int:
     for deploy in active_deploys:
         try:
             status = await adapter.get_lxc_status(deploy.container_node, deploy.container_vmid)
-            lxc_status = status.get("status", "unknown")
+            lxc_status = status.status
             if lxc_status != "running":
                 logger.warning(
                     "Reconciler: active deploy %s has container %d on %s "

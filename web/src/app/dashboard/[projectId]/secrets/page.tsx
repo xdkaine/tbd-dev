@@ -51,11 +51,11 @@ export default function SecretsPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-500">Loading...</p>;
+    return <p className="text-sm text-zinc-500">Loading...</p>;
   }
 
   if (!project) {
-    return <p className="text-sm text-red-600">Project not found</p>;
+    return <p className="text-sm text-red-400">Project not found</p>;
   }
 
   // Group secrets by scope
@@ -72,32 +72,32 @@ export default function SecretsPage() {
     <div>
       {/* Breadcrumb */}
       <div className="mb-4 text-sm">
-        <Link href="/dashboard" className="text-gray-400 hover:text-gray-600">
+        <Link href="/dashboard" className="text-zinc-500 hover:text-zinc-300">
           Projects
         </Link>
-        <span className="mx-1 text-gray-300">/</span>
+        <span className="mx-1 text-zinc-600">/</span>
         <Link
           href={`/dashboard/${projectId}`}
-          className="text-gray-400 hover:text-gray-600"
+          className="text-zinc-500 hover:text-zinc-300"
         >
           {project.name}
         </Link>
-        <span className="mx-1 text-gray-300">/</span>
-        <span className="font-medium text-gray-700">Secrets</span>
+        <span className="mx-1 text-zinc-600">/</span>
+        <span className="font-medium text-zinc-300">Secrets</span>
       </div>
 
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Secrets</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-zinc-100">Secrets</h1>
+          <p className="text-sm text-zinc-400">
             Environment variables for {project.name}. Values are encrypted at
             rest and never displayed.
           </p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-black hover:bg-brand-400"
         >
           Add secret
         </button>
@@ -117,11 +117,11 @@ export default function SecretsPage() {
 
       {/* Secret list grouped by scope */}
       {secrets.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
-          <p className="text-sm text-gray-500">No secrets configured yet.</p>
+        <div className="rounded-lg border border-dashed border-zinc-800 p-8 text-center">
+          <p className="text-sm text-zinc-400">No secrets configured yet.</p>
           <button
             onClick={() => setShowCreate(true)}
-            className="mt-2 text-sm font-medium text-brand-600 hover:text-brand-700"
+            className="mt-2 text-sm font-medium text-brand-400 hover:text-brand-300"
           >
             Add your first secret
           </button>
@@ -133,44 +133,44 @@ export default function SecretsPage() {
             if (!items || items.length === 0) return null;
             return (
               <div key={scope}>
-                <h3 className="mb-2 text-sm font-semibold capitalize text-gray-700">
+                <h3 className="mb-2 text-sm font-semibold capitalize text-zinc-300">
                   {scope === "project" ? "Project-wide" : scope}
                 </h3>
-                <div className="overflow-hidden rounded-lg border border-gray-200">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50">
+                <div className="overflow-hidden rounded-lg border border-zinc-800">
+                  <table className="min-w-full divide-y divide-zinc-800 text-sm">
+                    <thead className="bg-zinc-900/50">
                       <tr>
-                        <th className="px-4 py-2 text-left font-medium text-gray-500">
+                        <th className="px-4 py-2 text-left font-medium text-zinc-500">
                           Key
                         </th>
-                        <th className="px-4 py-2 text-left font-medium text-gray-500">
+                        <th className="px-4 py-2 text-left font-medium text-zinc-500">
                           Value
                         </th>
-                        <th className="px-4 py-2 text-left font-medium text-gray-500">
+                        <th className="px-4 py-2 text-left font-medium text-zinc-500">
                           Created
                         </th>
-                        <th className="px-4 py-2 text-right font-medium text-gray-500">
+                        <th className="px-4 py-2 text-right font-medium text-zinc-500">
                           Actions
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-zinc-800">
                       {items.map((s) => (
-                        <tr key={s.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-2 font-mono text-xs text-gray-900">
+                        <tr key={s.id} className="hover:bg-zinc-800/50">
+                          <td className="px-4 py-2 font-mono text-xs text-zinc-100">
                             {s.key}
                           </td>
-                          <td className="px-4 py-2 text-xs text-gray-400">
+                          <td className="px-4 py-2 text-xs text-zinc-500">
                             ••••••••
                           </td>
-                          <td className="px-4 py-2 text-xs text-gray-500">
+                          <td className="px-4 py-2 text-xs text-zinc-500">
                             {timeAgo(s.created_at)}
                           </td>
                           <td className="px-4 py-2 text-right">
                             <button
                               onClick={() => handleDelete(s.key)}
                               disabled={deleting === s.key}
-                              className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                              className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
                             >
                               {deleting === s.key ? "Deleting..." : "Delete"}
                             </button>
@@ -233,12 +233,12 @@ function CreateSecretForm({
   }
 
   return (
-    <div className="mb-6 rounded-lg border border-brand-200 bg-brand-50 p-4">
-      <h2 className="mb-3 text-sm font-semibold text-gray-900">Add secret</h2>
+    <div className="mb-6 rounded-lg border border-brand-800 bg-brand-950/50 p-4">
+      <h2 className="mb-3 text-sm font-semibold text-zinc-100">Add secret</h2>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Key
             </label>
             <input
@@ -247,12 +247,12 @@ function CreateSecretForm({
               autoFocus
               value={key}
               onChange={(e) => setKey(e.target.value.toUpperCase())}
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 font-mono text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 font-mono text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
               placeholder="DATABASE_URL"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Value
             </label>
             <input
@@ -260,18 +260,18 @@ function CreateSecretForm({
               required
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
               placeholder="secret-value"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Scope
             </label>
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value as Scope)}
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
             >
               <option value="project">Project-wide</option>
               <option value="production">Production only</option>
@@ -281,20 +281,20 @@ function CreateSecretForm({
           </div>
         </div>
 
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-red-400">{error}</p>}
 
         <div className="flex gap-2">
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            className="rounded-md bg-brand-500 px-3 py-1.5 text-xs font-medium text-black hover:bg-brand-400 disabled:opacity-50"
           >
             {submitting ? "Saving..." : "Add secret"}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:bg-zinc-800"
           >
             Cancel
           </button>

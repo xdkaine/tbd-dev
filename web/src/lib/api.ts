@@ -108,6 +108,10 @@ import type {
   Secret,
   SecretCreate,
   SecretListResponse,
+  Template,
+  TemplateDeployRequest,
+  TemplateDeployResponse,
+  TemplateListResponse,
   TokenResponse,
   UserInfo,
   UserSearchResponse,
@@ -318,6 +322,17 @@ export const api = {
   /* GitHub integration */
   github: {
     listRepos: () => request<GitHubRepo[]>("/auth/github/repos"),
+  },
+
+  /* Templates */
+  templates: {
+    list: () => request<TemplateListResponse>("/templates"),
+    get: (slug: string) => request<Template>(`/templates/${slug}`),
+    deploy: (slug: string, body: TemplateDeployRequest) =>
+      request<TemplateDeployResponse>(`/templates/${slug}/deploy`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
   },
 
   /* Admin */

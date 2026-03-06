@@ -81,7 +81,7 @@ export default function NetworkPoliciesPage() {
 
   if (user && user.role === "JAS_Developer") {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-red-400">
         You do not have permission to view this page.
       </p>
     );
@@ -150,10 +150,10 @@ export default function NetworkPoliciesPage() {
     <div>
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-zinc-100">
             Network Policies
           </h1>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-zinc-500">
             Firewall rules per project &mdash; default posture is deny-all
             egress
           </p>
@@ -161,7 +161,7 @@ export default function NetworkPoliciesPage() {
         {isFaculty && (
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="rounded-md bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+            className="rounded-lg bg-brand-500 px-3 py-1.5 text-sm font-medium text-black hover:bg-brand-400"
           >
             {showCreate ? "Cancel" : "New Policy"}
           </button>
@@ -178,13 +178,13 @@ export default function NetworkPoliciesPage() {
 
       {/* Create form */}
       {showCreate && isFaculty && (
-        <div className="mb-6 rounded-lg border border-brand-200 bg-brand-50 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">
+        <div className="mb-6 rounded-lg border border-brand-800 bg-brand-950/50 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-zinc-100">
             Create Network Policy
           </h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">
+              <label className="mb-1 block text-xs font-medium text-zinc-300">
                 Project
               </label>
               <select
@@ -192,7 +192,7 @@ export default function NetworkPoliciesPage() {
                 onChange={(e) =>
                   setCreateForm({ ...createForm, project_id: e.target.value })
                 }
-                className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200"
               >
                 <option value="">Select project...</option>
                 {projects.map((p) => (
@@ -203,7 +203,7 @@ export default function NetworkPoliciesPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">
+              <label className="mb-1 block text-xs font-medium text-zinc-300">
                 Name
               </label>
               <input
@@ -212,12 +212,12 @@ export default function NetworkPoliciesPage() {
                 onChange={(e) =>
                   setCreateForm({ ...createForm, name: e.target.value })
                 }
-                className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 placeholder-zinc-600"
                 placeholder="e.g. Allow HTTPS"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">
+              <label className="mb-1 block text-xs font-medium text-zinc-300">
                 Direction
               </label>
               <select
@@ -228,14 +228,14 @@ export default function NetworkPoliciesPage() {
                     direction: e.target.value as "egress" | "ingress",
                   })
                 }
-                className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200"
               >
                 <option value="egress">Egress</option>
                 <option value="ingress">Ingress</option>
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">
+              <label className="mb-1 block text-xs font-medium text-zinc-300">
                 Protocol
               </label>
               <select
@@ -246,7 +246,7 @@ export default function NetworkPoliciesPage() {
                     protocol: e.target.value as "tcp" | "udp" | "icmp" | "any",
                   })
                 }
-                className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200"
               >
                 <option value="tcp">TCP</option>
                 <option value="udp">UDP</option>
@@ -255,7 +255,7 @@ export default function NetworkPoliciesPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">
+              <label className="mb-1 block text-xs font-medium text-zinc-300">
                 Port
               </label>
               <input
@@ -267,14 +267,14 @@ export default function NetworkPoliciesPage() {
                     port: e.target.value ? Number(e.target.value) : undefined,
                   })
                 }
-                className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 placeholder-zinc-600"
                 placeholder="e.g. 443"
                 min={1}
                 max={65535}
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">
+              <label className="mb-1 block text-xs font-medium text-zinc-300">
                 Destination
               </label>
               <input
@@ -286,12 +286,12 @@ export default function NetworkPoliciesPage() {
                     destination: e.target.value,
                   })
                 }
-                className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 placeholder-zinc-600"
                 placeholder="e.g. 0.0.0.0/0"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-700">
+              <label className="mb-1 block text-xs font-medium text-zinc-300">
                 Action
               </label>
               <select
@@ -302,7 +302,7 @@ export default function NetworkPoliciesPage() {
                     action: e.target.value as "allow" | "deny",
                   })
                 }
-                className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200"
               >
                 <option value="allow">Allow</option>
                 <option value="deny">Deny</option>
@@ -317,7 +317,7 @@ export default function NetworkPoliciesPage() {
                   !createForm.name ||
                   !createForm.destination
                 }
-                className="rounded bg-brand-600 px-4 py-1 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                className="rounded-lg bg-brand-500 px-4 py-1 text-sm font-medium text-black hover:bg-brand-400 disabled:opacity-50"
               >
                 {saving ? "Creating..." : "Create Policy"}
               </button>
@@ -328,7 +328,7 @@ export default function NetworkPoliciesPage() {
 
       {/* Filters */}
       <div className="mb-4">
-        <label className="mb-1 block text-xs font-medium text-gray-700">
+        <label className="mb-1 block text-xs font-medium text-zinc-300">
           Direction
         </label>
         <select
@@ -337,7 +337,7 @@ export default function NetworkPoliciesPage() {
             setDirFilter(e.target.value);
             setPage(0);
           }}
-          className="rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
         >
           {DIRECTION_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -349,68 +349,68 @@ export default function NetworkPoliciesPage() {
 
       {/* Table */}
       {loading ? (
-        <p className="text-sm text-gray-500">Loading policies...</p>
+        <p className="text-sm text-zinc-500">Loading policies...</p>
       ) : policies.length === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-500">
+        <p className="py-8 text-center text-sm text-zinc-500">
           No network policies configured yet. All projects use the default
           deny-all egress posture.
         </p>
       ) : (
         <>
-          <div className="overflow-hidden rounded-lg border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
+          <div className="overflow-hidden rounded-lg border border-zinc-800">
+            <table className="min-w-full divide-y divide-zinc-800 text-sm">
+              <thead className="bg-zinc-900/50">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Name
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Project
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Direction
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Rule
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Action
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Status
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Created
                   </th>
                   {isFaculty && (
-                    <th className="px-4 py-2 text-right font-medium text-gray-500">
+                    <th className="px-4 py-2 text-right font-medium text-zinc-400">
                       Actions
                     </th>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-zinc-800">
                 {policies.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-2 text-xs font-medium text-gray-900">
+                  <tr key={p.id} className="hover:bg-zinc-800/50">
+                    <td className="px-4 py-2 text-xs font-medium text-zinc-100">
                       {p.name}
                     </td>
-                    <td className="px-4 py-2 text-xs text-gray-600">
+                    <td className="px-4 py-2 text-xs text-zinc-400">
                       {p.project_name ?? p.project_id.slice(0, 8)}
                     </td>
                     <td className="px-4 py-2">
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                           p.direction === "egress"
-                            ? "bg-orange-100 text-orange-700"
-                            : "bg-sky-100 text-sky-700"
+                            ? "bg-orange-950/30 text-orange-400"
+                            : "bg-sky-950/30 text-sky-400"
                         }`}
                       >
                         {p.direction}
                       </span>
                     </td>
                     <td className="px-4 py-2">
-                      <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">
+                      <code className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-zinc-300">
                         {p.protocol.toUpperCase()}
                         {p.port ? `:${p.port}` : ""} &rarr; {p.destination}
                       </code>
@@ -419,8 +419,8 @@ export default function NetworkPoliciesPage() {
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                           p.action === "allow"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
+                            ? "bg-green-950/30 text-green-400"
+                            : "bg-red-950/30 text-red-400"
                         }`}
                       >
                         {p.action}
@@ -430,14 +430,14 @@ export default function NetworkPoliciesPage() {
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                           p.enabled
-                            ? "bg-green-100 text-green-700"
-                            : "bg-gray-100 text-gray-500"
+                            ? "bg-green-950/30 text-green-400"
+                            : "bg-zinc-800 text-zinc-500"
                         }`}
                       >
                         {p.enabled ? "Active" : "Disabled"}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-2 text-xs text-gray-500">
+                    <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-500">
                       {formatDate(p.created_at)}
                     </td>
                     {isFaculty && (
@@ -446,7 +446,7 @@ export default function NetworkPoliciesPage() {
                           <button
                             onClick={() => handleToggle(p)}
                             disabled={toggling === p.id}
-                            className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                            className="rounded-lg border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800/50 disabled:opacity-50"
                           >
                             {toggling === p.id
                               ? "..."
@@ -457,7 +457,7 @@ export default function NetworkPoliciesPage() {
                           <button
                             onClick={() => handleDelete(p.id)}
                             disabled={deleting === p.id}
-                            className="rounded border border-red-200 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                            className="rounded-lg border border-red-900 px-2 py-0.5 text-xs text-red-400 hover:bg-red-950/30 disabled:opacity-50"
                           >
                             {deleting === p.id ? "..." : "Delete"}
                           </button>
@@ -473,14 +473,14 @@ export default function NetworkPoliciesPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="mt-3 flex items-center justify-between text-sm">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-zinc-500">
                 Page {page + 1} of {totalPages}
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                   disabled={page === 0}
-                  className="rounded border border-gray-300 px-3 py-1 text-xs disabled:opacity-50"
+                  className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 disabled:opacity-50"
                 >
                   Previous
                 </button>
@@ -489,7 +489,7 @@ export default function NetworkPoliciesPage() {
                     setPage((p) => Math.min(totalPages - 1, p + 1))
                   }
                   disabled={page >= totalPages - 1}
-                  className="rounded border border-gray-300 px-3 py-1 text-xs disabled:opacity-50"
+                  className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 disabled:opacity-50"
                 >
                   Next
                 </button>
@@ -512,14 +512,14 @@ function SummaryCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
-      <p className="text-xs font-medium text-gray-500">
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+      <p className="text-xs font-medium text-zinc-500">
         {label}
         {sub && (
-          <span className="ml-1 font-normal text-gray-400">({sub})</span>
+          <span className="ml-1 font-normal text-zinc-500">({sub})</span>
         )}
       </p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
+      <p className="mt-1 text-2xl font-bold text-zinc-100">{value}</p>
     </div>
   );
 }

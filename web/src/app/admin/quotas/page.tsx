@@ -42,7 +42,7 @@ export default function QuotasPage() {
 
   if (user && user.role === "JAS_Developer") {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-red-400">
         You do not have permission to view this page.
       </p>
     );
@@ -86,8 +86,8 @@ export default function QuotasPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Quota Management</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-zinc-100">Quota Management</h1>
+        <p className="text-sm text-zinc-500">
           Resource limits per project &mdash; {total} projects with quotas
         </p>
       </div>
@@ -117,63 +117,63 @@ export default function QuotasPage() {
             setSearch(e.target.value);
             setPage(0);
           }}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
           placeholder="Search projects..."
         />
       </div>
 
       {/* Table */}
       {loading ? (
-        <p className="text-sm text-gray-500">Loading quotas...</p>
+        <p className="text-sm text-zinc-500">Loading quotas...</p>
       ) : quotas.length === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-500">
+        <p className="py-8 text-center text-sm text-zinc-500">
           No quotas found.
         </p>
       ) : (
         <>
-          <div className="overflow-hidden rounded-lg border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
+          <div className="overflow-hidden rounded-lg border border-zinc-800">
+            <table className="min-w-full divide-y divide-zinc-800 text-sm">
+              <thead className="bg-zinc-900/50">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Project
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Owner
                   </th>
-                  <th className="px-4 py-2 text-right font-medium text-gray-500">
+                  <th className="px-4 py-2 text-right font-medium text-zinc-400">
                     CPU (vCPU)
                   </th>
-                  <th className="px-4 py-2 text-right font-medium text-gray-500">
+                  <th className="px-4 py-2 text-right font-medium text-zinc-400">
                     RAM (MB)
                   </th>
-                  <th className="px-4 py-2 text-right font-medium text-gray-500">
+                  <th className="px-4 py-2 text-right font-medium text-zinc-400">
                     Disk (MB)
                   </th>
                   {isFaculty && (
-                    <th className="px-4 py-2 text-right font-medium text-gray-500">
+                    <th className="px-4 py-2 text-right font-medium text-zinc-400">
                       Actions
                     </th>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-zinc-800">
                 {quotas.map((q) => {
                   const isEditing = editingId === q.project_id;
 
                   return (
-                    <tr key={q.id} className="hover:bg-gray-50">
+                    <tr key={q.id} className="hover:bg-zinc-800/50">
                       <td className="px-4 py-2">
                         <div>
-                          <p className="font-medium text-gray-900">
+                          <p className="font-medium text-zinc-100">
                             {q.project_name}
                           </p>
-                          <p className="font-mono text-xs text-gray-400">
+                          <p className="font-mono text-xs text-zinc-500">
                             {q.project_slug}
                           </p>
                         </div>
                       </td>
-                      <td className="px-4 py-2 text-xs text-gray-600">
+                      <td className="px-4 py-2 text-xs text-zinc-400">
                         {q.owner_username}
                       </td>
                       <td className="px-4 py-2 text-right">
@@ -187,12 +187,12 @@ export default function QuotasPage() {
                                 cpu_limit: Number(e.target.value),
                               })
                             }
-                            className="w-20 rounded border border-gray-300 px-2 py-0.5 text-right text-xs"
+                            className="w-20 rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-right text-xs text-zinc-200"
                             min={1}
                             max={16}
                           />
                         ) : (
-                          <span className="font-mono text-xs font-semibold text-gray-900">
+                          <span className="font-mono text-xs font-semibold text-zinc-100">
                             {q.cpu_limit}
                           </span>
                         )}
@@ -208,13 +208,13 @@ export default function QuotasPage() {
                                 ram_limit: Number(e.target.value),
                               })
                             }
-                            className="w-24 rounded border border-gray-300 px-2 py-0.5 text-right text-xs"
+                            className="w-24 rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-right text-xs text-zinc-200"
                             min={256}
                             max={32768}
                             step={256}
                           />
                         ) : (
-                          <span className="font-mono text-xs text-gray-700">
+                          <span className="font-mono text-xs text-zinc-300">
                             {q.ram_limit}
                           </span>
                         )}
@@ -230,13 +230,13 @@ export default function QuotasPage() {
                                 disk_limit: Number(e.target.value),
                               })
                             }
-                            className="w-24 rounded border border-gray-300 px-2 py-0.5 text-right text-xs"
+                            className="w-24 rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-0.5 text-right text-xs text-zinc-200"
                             min={1024}
                             max={102400}
                             step={1024}
                           />
                         ) : (
-                          <span className="font-mono text-xs text-gray-700">
+                          <span className="font-mono text-xs text-zinc-300">
                             {q.disk_limit}
                           </span>
                         )}
@@ -248,13 +248,13 @@ export default function QuotasPage() {
                               <button
                                 onClick={() => saveQuota(q.project_id)}
                                 disabled={saving}
-                                className="rounded bg-brand-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                                className="rounded-lg bg-brand-500 px-2 py-0.5 text-xs font-medium text-black hover:bg-brand-400 disabled:opacity-50"
                               >
                                 {saving ? "Saving..." : "Save"}
                               </button>
                               <button
                                 onClick={cancelEditing}
-                                className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50"
+                                className="rounded-lg border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800/50"
                               >
                                 Cancel
                               </button>
@@ -262,7 +262,7 @@ export default function QuotasPage() {
                           ) : (
                             <button
                               onClick={() => startEditing(q)}
-                              className="rounded border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                              className="rounded-lg border border-zinc-700 px-2 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
                             >
                               Edit
                             </button>
@@ -279,14 +279,14 @@ export default function QuotasPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="mt-3 flex items-center justify-between text-sm">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-zinc-500">
                 Page {page + 1} of {totalPages}
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                   disabled={page === 0}
-                  className="rounded border border-gray-300 px-3 py-1 text-xs disabled:opacity-50"
+                  className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 disabled:opacity-50"
                 >
                   Previous
                 </button>
@@ -295,7 +295,7 @@ export default function QuotasPage() {
                     setPage((p) => Math.min(totalPages - 1, p + 1))
                   }
                   disabled={page >= totalPages - 1}
-                  className="rounded border border-gray-300 px-3 py-1 text-xs disabled:opacity-50"
+                  className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 disabled:opacity-50"
                 >
                   Next
                 </button>
@@ -318,14 +318,14 @@ function SummaryCard({
   sub?: string;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
-      <p className="text-xs font-medium text-gray-500">
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+      <p className="text-xs font-medium text-zinc-500">
         {label}
         {sub && (
-          <span className="ml-1 font-normal text-gray-400">({sub})</span>
+          <span className="ml-1 font-normal text-zinc-500">({sub})</span>
         )}
       </p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
+      <p className="mt-1 text-2xl font-bold text-zinc-100">{value}</p>
     </div>
   );
 }

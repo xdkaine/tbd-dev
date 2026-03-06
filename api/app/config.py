@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     github_client_id: str = ""
     github_client_secret: str = ""
 
+    # Template source — repo containing template directories under templates/
+    template_source_repo: str = "xdkaine/tbd-dev"  # owner/repo with template dirs
+    template_source_branch: str = "main"  # branch to read templates from
+    template_source_token: str = ""  # PAT for reading source repo (if private)
+
     # Deploy queue
     deploy_max_concurrent: int = 2  # Max concurrent deploys per environment
     deploy_queue_max_size: int = 50  # Max queued deploys per environment

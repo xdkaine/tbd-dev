@@ -9,4 +9,5 @@ from app.models.secret import Secret  # noqa: F401
 from app.models.network import Vlan, Quota  # noqa: F401
 from app.models.network_policy import NetworkPolicy  # noqa: F401
 from app.models.audit import AuditLog  # noqa: F401
+from app.models.template import Template  # noqa: F401
 from app.models.base import Base  # noqa: F401

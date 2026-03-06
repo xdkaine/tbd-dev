@@ -47,15 +47,15 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       {/* Brand */}
-      <div className="flex h-14 items-center border-b border-gray-200 px-4">
+      <div className="flex h-14 items-center border-b border-zinc-800 px-4">
         <Link
           href="/dashboard"
-          className="text-lg font-bold text-brand-700"
+          className="font-mono text-lg font-bold text-brand-500"
           onClick={onNavigate}
         >
-          TBD
+          tbd
         </Link>
-        <span className="ml-2 rounded bg-brand-100 px-1.5 py-0.5 text-[10px] font-semibold text-brand-700 uppercase">
+        <span className="ml-2 rounded bg-brand-950 px-1.5 py-0.5 text-[10px] font-semibold text-brand-400 uppercase">
           {user.role}
         </span>
       </div>
@@ -70,8 +70,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           return (
             <div key={item.href}>
               {item.section === "admin" && (
-                <div className="mb-1 mt-4 border-t border-gray-200 pt-3">
-                  <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                <div className="mb-1 mt-4 border-t border-zinc-800 pt-3">
+                  <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
                     Admin
                   </p>
                 </div>
@@ -80,11 +80,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 href={item.href}
                 onClick={onNavigate}
                 className={clsx(
-                  "block rounded-md py-1.5 text-sm font-medium",
+                  "block rounded-md py-1.5 text-sm font-medium transition-colors",
                   item.indent ? "pl-6 pr-3" : "px-3",
                   isActive
-                    ? "bg-brand-100 text-brand-800"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+                    ? "bg-brand-500/10 text-brand-400"
+                    : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200",
                 )}
               >
                 {item.label}
@@ -95,14 +95,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       {/* User footer */}
-      <div className="border-t border-gray-200 p-3">
-        <p className="truncate text-sm font-medium text-gray-900">
+      <div className="border-t border-zinc-800 p-3">
+        <p className="truncate text-sm font-medium text-zinc-200">
           {user.display_name}
         </p>
-        <p className="truncate text-xs text-gray-500">{user.email}</p>
+        <p className="truncate text-xs text-zinc-500">{user.email}</p>
         <button
           onClick={logout}
-          className="mt-2 text-xs text-red-600 hover:text-red-800"
+          className="mt-2 text-xs text-red-400 hover:text-red-300 transition-colors"
         >
           Sign out
         </button>
@@ -122,7 +122,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   return (
     <>
       {/* Desktop sidebar — always visible at md+ */}
-      <aside className="hidden md:flex h-screen w-56 flex-col border-r border-gray-200 bg-gray-50">
+      <aside className="hidden md:flex h-screen w-56 flex-col border-r border-zinc-800 bg-[#0a0a0c]">
         <SidebarContent />
       </aside>
 
@@ -135,7 +135,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       >
         {/* Backdrop */}
         <div
-          className="absolute inset-0 bg-black/30"
+          className="absolute inset-0 bg-black/60"
           onClick={onMobileClose}
           aria-hidden="true"
         />
@@ -143,7 +143,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         {/* Drawer panel */}
         <aside
           className={clsx(
-            "relative flex h-full w-64 max-w-[80vw] flex-col bg-gray-50 shadow-xl",
+            "relative flex h-full w-64 max-w-[80vw] flex-col bg-[#0a0a0c] shadow-xl",
             "transition-transform duration-200 ease-in-out",
             mobileOpen ? "translate-x-0" : "-translate-x-full",
           )}
@@ -151,7 +151,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           {/* Close button */}
           <button
             onClick={onMobileClose}
-            className="absolute top-3 right-3 rounded-md p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+            className="absolute top-3 right-3 rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
             aria-label="Close sidebar"
           >
             <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">

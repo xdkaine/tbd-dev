@@ -19,6 +19,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "PyJWT[crypto]>=2.8.0",
     "PyYAML>=6.0",
+    "prometheus-fastapi-instrumentator>=7.0.0",
 ]
 
 [project.optional-dependencies]

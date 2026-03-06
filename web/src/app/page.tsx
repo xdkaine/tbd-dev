@@ -1,344 +1,692 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, useRef, useCallback, KeyboardEvent } from "react";
 import Link from "next/link";
 
 /* ═══════════════════════════════════════════════════════════════
-   Icons — only what we need
+   Simulated Filesystem
    ═══════════════════════════════════════════════════════════════ */
 
-function IconArrowRight({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-    </svg>
-  );
+type FSNode = { type: "file"; content: string } | { type: "dir"; children: Record<string, FSNode> };
+
+const FILE_SYSTEM: Record<string, FSNode> = {
+  "~": {
+    type: "dir",
+    children: {
+      projects: {
+        type: "dir",
+        children: {
+          portfolio: {
+            type: "dir",
+            children: {
+              "index.html": {
+                type: "file",
+                content: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>My Portfolio</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app"></div>
+  <script src="src/app.js"></script>
+</body>
+</html>`,
+              },
+              "style.css": {
+                type: "file",
+                content: `* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #fafafa; }
+#app { max-width: 960px; margin: 0 auto; padding: 2rem; }
+h1 { font-size: 2.5rem; margin-bottom: 1rem; }
+.projects { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }`,
+              },
+              "package.json": {
+                type: "file",
+                content: `{
+  "name": "portfolio",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vite": "^5.0.0"
+  }
+}`,
+              },
+              "README.md": {
+                type: "file",
+                content: `# Portfolio
+
+My personal portfolio site, deployed with tbd.
+
+## Quick Start
+\`\`\`
+npm install
+npm run dev
+\`\`\`
+
+## Deploy
+Push to \`main\` — tbd handles the rest.
+Live at https://portfolio.dev.sdc.cpp`,
+              },
+              src: {
+                type: "dir",
+                children: {
+                  "app.js": {
+                    type: "file",
+                    content: `import { initRouter } from './utils.js';
+
+const app = document.getElementById('app');
+app.innerHTML = '<h1>Welcome</h1><p>Portfolio coming soon.</p>';
+initRouter();`,
+                  },
+                  "utils.js": {
+                    type: "file",
+                    content: `export function initRouter() {
+  window.addEventListener('popstate', () => {
+    console.log('route changed:', location.pathname);
+  });
 }
 
-function IconGitBranch({ className = "w-5 h-5" }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 3v12m0 0a3 3 0 103 3h6a3 3 0 100-3m-9 0a3 3 0 013 3m6-3a3 3 0 013 3M18 3v6a3 3 0 01-3 3H9" />
-    </svg>
-  );
+export function formatDate(d) {
+  return new Intl.DateTimeFormat('en-US').format(new Date(d));
+}`,
+                  },
+                },
+              },
+              public: {
+                type: "dir",
+                children: {
+                  "favicon.ico": { type: "file", content: "[binary file]" },
+                  "logo.png": { type: "file", content: "[binary file]" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+function resolvePath(cwd: string, target: string): string | null {
+  let parts: string[];
+  if (target === "~" || target === "") {
+    return "~";
+  }
+  if (target.startsWith("~/")) {
+    parts = ["~", ...target.slice(2).split("/").filter(Boolean)];
+  } else if (target.startsWith("/")) {
+    parts = ["~", ...target.slice(1).split("/").filter(Boolean)];
+  } else {
+    parts = [...cwd.split("/").filter(Boolean), ...target.split("/").filter(Boolean)];
+  }
+
+  const resolved: string[] = [];
+  for (const p of parts) {
+    if (p === ".") continue;
+    if (p === "..") {
+      if (resolved.length > 1) resolved.pop();
+      continue;
+    }
+    resolved.push(p);
+  }
+  return resolved.join("/") || "~";
 }
 
-function IconContainer({ className = "w-5 h-5" }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-    </svg>
-  );
-}
-
-function IconLock({ className = "w-5 h-5" }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-    </svg>
-  );
-}
-
-function IconGlobe({ className = "w-5 h-5" }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5a17.92 17.92 0 01-8.716-4.247m0 0A8.966 8.966 0 013 12c0-1.528.382-2.968 1.055-4.228" />
-    </svg>
-  );
+function getNode(path: string): FSNode | null {
+  const parts = path.split("/").filter(Boolean);
+  let node: FSNode | null = FILE_SYSTEM["~"];
+  if (!node) return null;
+  for (let i = 1; i < parts.length; i++) {
+    if (!node || node.type !== "dir") return null;
+    node = node.children[parts[i]] ?? null;
+  }
+  return node;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Hooks
+   Command Executor
    ═══════════════════════════════════════════════════════════════ */
 
-function useScrollReveal() {
-  const ref = useRef<HTMLDivElement>(null);
+function executeCommand(
+  input: string,
+  cwd: string
+): { output: string[]; newCwd: string } {
+  const trimmed = input.trim();
+  if (!trimmed) return { output: [], newCwd: cwd };
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+  const parts = trimmed.split(/\s+/);
+  const cmd = parts[0];
+  const args = parts.slice(1);
 
-    const children = el.querySelectorAll("[data-reveal]");
-    if (children.length === 0) return;
+  switch (cmd) {
+    case "help": {
+      return {
+        output: [
+          "Available commands:",
+          "  ls [dir]        List directory contents",
+          "  cd <dir>        Change directory",
+          "  pwd             Print working directory",
+          "  cat <file>      Show file contents",
+          "  clear           Clear terminal",
+          "  echo <text>     Print text",
+          "  whoami          Display current user",
+          "  date            Display current date",
+          "  tree            Show directory tree",
+          "  help            Show this help message",
+        ],
+        newCwd: cwd,
+      };
+    }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("revealed");
-            observer.unobserve(entry.target);
+    case "ls": {
+      const target = args[0] ? resolvePath(cwd, args[0]) : cwd;
+      if (!target) return { output: [`ls: cannot access '${args[0]}': No such file or directory`], newCwd: cwd };
+      const node = getNode(target);
+      if (!node) return { output: [`ls: cannot access '${args[0]}': No such file or directory`], newCwd: cwd };
+      if (node.type === "file") return { output: [args[0] || cwd.split("/").pop() || ""], newCwd: cwd };
+      const entries = Object.entries(node.children)
+        .map(([name, n]) => (n.type === "dir" ? `${name}/` : name))
+        .sort((a, b) => {
+          const aDir = a.endsWith("/");
+          const bDir = b.endsWith("/");
+          if (aDir && !bDir) return -1;
+          if (!aDir && bDir) return 1;
+          return a.localeCompare(b);
+        });
+      return { output: [entries.join("  ")], newCwd: cwd };
+    }
+
+    case "cd": {
+      if (!args[0] || args[0] === "~") return { output: [], newCwd: "~" };
+      const target = resolvePath(cwd, args[0]);
+      if (!target) return { output: [`cd: no such file or directory: ${args[0]}`], newCwd: cwd };
+      const node = getNode(target);
+      if (!node) return { output: [`cd: no such file or directory: ${args[0]}`], newCwd: cwd };
+      if (node.type !== "dir") return { output: [`cd: not a directory: ${args[0]}`], newCwd: cwd };
+      return { output: [], newCwd: target };
+    }
+
+    case "pwd": {
+      return { output: [cwd.replace("~", "/home/developer")], newCwd: cwd };
+    }
+
+    case "cat": {
+      if (!args[0]) return { output: ["cat: missing file operand"], newCwd: cwd };
+      const target = resolvePath(cwd, args[0]);
+      if (!target) return { output: [`cat: ${args[0]}: No such file or directory`], newCwd: cwd };
+      const node = getNode(target);
+      if (!node) return { output: [`cat: ${args[0]}: No such file or directory`], newCwd: cwd };
+      if (node.type === "dir") return { output: [`cat: ${args[0]}: Is a directory`], newCwd: cwd };
+      return { output: node.content.split("\n"), newCwd: cwd };
+    }
+
+    case "echo": {
+      return { output: [args.join(" ")], newCwd: cwd };
+    }
+
+    case "whoami": {
+      return { output: ["developer"], newCwd: cwd };
+    }
+
+    case "date": {
+      return { output: [new Date().toString()], newCwd: cwd };
+    }
+
+    case "tree": {
+      const target = args[0] ? resolvePath(cwd, args[0]) : cwd;
+      if (!target) return { output: [`tree: '${args[0]}': No such file or directory`], newCwd: cwd };
+      const node = getNode(target);
+      if (!node) return { output: [`tree: '${args[0]}': No such file or directory`], newCwd: cwd };
+      if (node.type === "file") return { output: [args[0] || "."], newCwd: cwd };
+      const lines: string[] = ["."];
+      const walk = (n: FSNode, prefix: string) => {
+        if (n.type !== "dir") return;
+        const entries = Object.entries(n.children).sort((a, b) => {
+          const aDir = a[1].type === "dir";
+          const bDir = b[1].type === "dir";
+          if (aDir && !bDir) return -1;
+          if (!aDir && bDir) return 1;
+          return a[0].localeCompare(b[0]);
+        });
+        entries.forEach(([name, child], i) => {
+          const isLast = i === entries.length - 1;
+          const connector = isLast ? "└── " : "├── ";
+          const display = child.type === "dir" ? `${name}/` : name;
+          lines.push(`${prefix}${connector}${display}`);
+          if (child.type === "dir") {
+            walk(child, prefix + (isLast ? "    " : "│   "));
           }
         });
-      },
-      { threshold: 0.1, rootMargin: "0px 0px -40px 0px" }
-    );
+      }
+      walk(node, "");
+      return { output: lines, newCwd: cwd };
+    }
 
-    children.forEach((child) => observer.observe(child));
-    return () => observer.disconnect();
-  }, []);
+    case "mkdir":
+      return { output: [`mkdir: permission denied`], newCwd: cwd };
+    case "touch":
+      return { output: [`touch: permission denied`], newCwd: cwd };
+    case "rm":
+      return { output: [`rm: permission denied`], newCwd: cwd };
+    case "mv":
+      return { output: [`mv: permission denied`], newCwd: cwd };
+    case "cp":
+      return { output: [`cp: permission denied`], newCwd: cwd };
+    case "vim":
+    case "nano":
+    case "vi":
+      return { output: [`${cmd}: this is a demo terminal — try cat instead`], newCwd: cwd };
+    case "git":
+      return { output: [`On branch main`, `Your branch is up to date with 'origin/main'.`, `nothing to commit, working tree clean`], newCwd: cwd };
+    case "npm":
+      if (args[0] === "run" && args[1] === "dev") {
+        return { output: ["VITE v5.0.0  ready in 124ms", "", "  ➜  Local:   http://localhost:5173/", "  ➜  Network: http://192.168.1.42:5173/"], newCwd: cwd };
+      }
+      if (args[0] === "install") {
+        return { output: ["added 42 packages in 2.1s"], newCwd: cwd };
+      }
+      return { output: [`npm: try 'npm install' or 'npm run dev'`], newCwd: cwd };
+    case "node":
+      return { output: [`node: this is a demo terminal`], newCwd: cwd };
+    case "python":
+    case "python3":
+      return { output: [`Python 3.12.0 (demo)`, `>>> this is a demo terminal`], newCwd: cwd };
+    case "curl":
+      return { output: [`curl: this is a demo terminal`], newCwd: cwd };
+    case "sudo":
+      return { output: [`developer is not in the sudoers file. This incident will be reported.`], newCwd: cwd };
+    case "exit":
+      return { output: ["logout", "Connection to demo closed."], newCwd: cwd };
 
-  return ref;
+    default:
+      return { output: [`command not found: ${cmd}`], newCwd: cwd };
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Navbar
+   Demo Animation Lines
    ═══════════════════════════════════════════════════════════════ */
 
-function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
+const DEMO_COMMAND = "git push origin main";
 
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+type DemoLine = {
+  text: string;
+  cls: string;
+  delay?: number;     // ms before this line appears (after previous)
+  gap?: boolean;      // extra margin-top
+};
 
-  return (
-    <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? "bg-black/80 backdrop-blur-xl border-b border-[var(--landing-border)]"
-          : "bg-transparent"
-      }`}
-    >
-      <div className="mx-auto max-w-5xl flex items-center justify-between px-6 py-4">
-        <Link href="/" className="font-mono text-lg font-bold tracking-tight text-[var(--landing-text)]">
-          tbd
-        </Link>
-
-        <div className="flex items-center gap-6">
-          <Link
-            href="/login"
-            className="text-sm text-[var(--landing-muted)] hover:text-[var(--landing-text)] transition-colors"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-400"
-          >
-            Get Started
-            <IconArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-      </div>
-    </nav>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Terminal Demo
-   ═══════════════════════════════════════════════════════════════ */
-
-const TERMINAL_LINES = [
-  { prompt: true, text: "git push origin main" },
-  { prompt: false, text: "remote: Resolving deltas: 100% (12/12), done." },
-  { prompt: false, text: "remote: Build started for commit a1f3c9e..." },
-  { prompt: false, text: "remote: Installing dependencies..." },
-  { prompt: false, text: "remote: Building application..." },
-  { prompt: false, text: "remote: Build succeeded in 24s", color: "text-green-400" },
-  { prompt: false, text: "remote: Provisioning LXC container..." },
-  { prompt: false, text: "remote: Container healthy, routing traffic...", color: "text-green-400" },
-  { prompt: false, text: "" },
-  { prompt: false, text: "Deploy live at https://myapp.dev.sdc.cpp", color: "text-white" },
+const GIT_OUTPUT: DemoLine[] = [
+  { text: "Enumerating objects: 12, done.", cls: "text-zinc-500", delay: 200 },
+  { text: "Compressing objects: 100% (8/8), done.", cls: "text-zinc-500", delay: 150 },
+  { text: "Writing objects: 100% (12/12), 3.42 KiB, done.", cls: "text-zinc-500", delay: 150 },
+  { text: "remote: Resolving deltas: 100% (3/3), done.", cls: "text-zinc-500", delay: 200 },
+  { text: "To github.com:user/portfolio.git", cls: "text-zinc-500", delay: 100 },
+  { text: "   a1f3c9e..b2d4e6f  main -> main", cls: "text-zinc-400", delay: 100 },
 ];
 
+const BUILD_OUTPUT: DemoLine[] = [
+  { text: "⏵ Webhook received — starting build...", cls: "text-zinc-400", gap: true, delay: 600 },
+  { text: "⏵ Cloning repo...                          done", cls: "text-zinc-400", delay: 500 },
+  { text: "⏵ Installing dependencies (npm install)...  done  3.2s", cls: "text-zinc-400", delay: 400 },
+  { text: "⏵ Building project (npm run build)...       done 12.4s", cls: "text-zinc-400", delay: 500 },
+  { text: "✓ Build succeeded", cls: "text-brand-400", delay: 300 },
+  { text: "⏵ Provisioning container...                 done  1.8s", cls: "text-zinc-400", delay: 400 },
+  { text: "⏵ Health check passed                             0.3s", cls: "text-zinc-400", delay: 300 },
+  { text: "✓ Deployed", cls: "text-brand-400", delay: 300 },
+];
+
+const ALL_DEMO_LINES: DemoLine[] = [...GIT_OUTPUT, ...BUILD_OUTPUT];
+
+/* ═══════════════════════════════════════════════════════════════
+   Terminal Component
+   ═══════════════════════════════════════════════════════════════ */
+
+type TermLine = {
+  text: string;
+  cls?: string;
+  gap?: boolean;
+  isPrompt?: boolean;
+  isLive?: boolean;
+};
+
 function TerminalDemo() {
+  const [phase, setPhase] = useState<"wait" | "typing" | "output" | "interactive">("wait");
+  const [typedChars, setTypedChars] = useState(0);
   const [visibleLines, setVisibleLines] = useState(0);
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const hasStarted = useRef(false);
+  const [history, setHistory] = useState<TermLine[]>([]);
+  const [inputValue, setInputValue] = useState("");
+  const [cwd, setCwd] = useState("~/projects/portfolio");
+  const [cmdHistory, setCmdHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const el = terminalRef.current;
-    if (!el) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !hasStarted.current) {
-          hasStarted.current = true;
-          let i = 0;
-          const interval = setInterval(() => {
-            i++;
-            setVisibleLines(i);
-            if (i >= TERMINAL_LINES.length) clearInterval(interval);
-          }, 500);
-        }
-      },
-      { threshold: 0.3 }
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
+  const scrollToBottom = useCallback(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, []);
 
+  // Phase: wait -> typing
+  useEffect(() => {
+    const t = setTimeout(() => setPhase("typing"), 500);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Phase: typing
+  useEffect(() => {
+    if (phase !== "typing") return;
+    if (typedChars >= DEMO_COMMAND.length) {
+      const t = setTimeout(() => setPhase("output"), 350);
+      return () => clearTimeout(t);
+    }
+    const t = setTimeout(
+      () => setTypedChars((c) => c + 1),
+      40 + Math.random() * 35
+    );
+    return () => clearTimeout(t);
+  }, [phase, typedChars]);
+
+  // Phase: output — reveal lines with individual delays
+  useEffect(() => {
+    if (phase !== "output") return;
+    if (visibleLines >= ALL_DEMO_LINES.length) {
+      // Show the live line then transition
+      const t = setTimeout(() => setPhase("interactive"), 600);
+      return () => clearTimeout(t);
+    }
+    const delay = ALL_DEMO_LINES[visibleLines]?.delay ?? 300;
+    const t = setTimeout(() => {
+      setVisibleLines((l) => l + 1);
+      scrollToBottom();
+    }, delay);
+    return () => clearTimeout(t);
+  }, [phase, visibleLines, scrollToBottom]);
+
+  // Auto-focus and scroll when interactive
+  useEffect(() => {
+    if (phase === "interactive") {
+      inputRef.current?.focus();
+      scrollToBottom();
+    }
+  }, [phase, scrollToBottom]);
+
+  // Scroll on history change
+  useEffect(() => {
+    scrollToBottom();
+  }, [history, scrollToBottom]);
+
+  const handleCommand = useCallback(
+    (input: string) => {
+      const trimmed = input.trim();
+
+      if (trimmed === "clear") {
+        setHistory([]);
+        setInputValue("");
+        setCmdHistory((h) => [...h, trimmed]);
+        setHistoryIndex(-1);
+        return;
+      }
+
+      const { output, newCwd } = executeCommand(trimmed, cwd);
+
+      const newLines: TermLine[] = [
+        { text: `${shortCwd(cwd)} $ ${trimmed}`, isPrompt: true },
+        ...output.map((line) => ({ text: line })),
+      ];
+
+      setHistory((h) => [...h, ...newLines]);
+      setCwd(newCwd);
+      setInputValue("");
+      if (trimmed) {
+        setCmdHistory((h) => [...h, trimmed]);
+      }
+      setHistoryIndex(-1);
+    },
+    [cwd]
+  );
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleCommand(inputValue);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (cmdHistory.length === 0) return;
+      const newIndex = historyIndex === -1 ? cmdHistory.length - 1 : Math.max(0, historyIndex - 1);
+      setHistoryIndex(newIndex);
+      setInputValue(cmdHistory[newIndex]);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (historyIndex === -1) return;
+      const newIndex = historyIndex + 1;
+      if (newIndex >= cmdHistory.length) {
+        setHistoryIndex(-1);
+        setInputValue("");
+      } else {
+        setHistoryIndex(newIndex);
+        setInputValue(cmdHistory[newIndex]);
+      }
+    } else if (e.key === "l" && e.ctrlKey) {
+      e.preventDefault();
+      setHistory([]);
+    }
+  };
+
+  const focusInput = () => {
+    if (phase === "interactive") {
+      inputRef.current?.focus();
+    }
+  };
+
+  const promptCwd = shortCwd(cwd);
+
   return (
-    <div ref={terminalRef} className="w-full max-w-2xl mx-auto">
-      <div className="rounded-lg border border-[var(--landing-border)] bg-[var(--landing-surface)] overflow-hidden">
-        {/* Title bar */}
-        <div className="flex items-center px-4 py-2.5 border-b border-[var(--landing-border)]">
-          <span className="text-xs text-[var(--landing-muted)] font-mono">
-            terminal
-          </span>
+    <div className="w-full max-w-2xl mx-auto">
+      <div
+        className="rounded-xl border border-[var(--landing-border)] bg-[var(--landing-surface)] overflow-hidden shadow-[0_0_80px_-20px_rgba(0,214,143,0.10)]"
+        onClick={focusInput}
+      >
+        {/* ── Title bar with traffic lights ── */}
+        <div className="flex items-center px-4 py-3 border-b border-[var(--landing-border)]">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+            <div className="w-3 h-3 rounded-full bg-[#febc2e]" />
+            <div className="w-3 h-3 rounded-full bg-[#28c840]" />
+          </div>
+          <div className="flex-1 text-center">
+            <span className="text-[12px] text-zinc-500 font-mono">
+              ~/projects/portfolio
+            </span>
+          </div>
+          <div className="w-[52px]" /> {/* spacer to balance traffic lights */}
         </div>
 
-        {/* Output */}
-        <div className="p-5 font-mono text-[13px] leading-relaxed min-h-[260px]">
-          {TERMINAL_LINES.map((line, i) => (
-            <div
-              key={i}
-              className={`terminal-line ${
-                i < visibleLines ? "" : "!opacity-0 !animate-none"
-              } ${line.color || "text-[#888]"}`}
-              style={{ animationDelay: `${i * 0.05}s` }}
-            >
-              {line.prompt && (
-                <span className="text-[var(--landing-muted)] select-none">$ </span>
-              )}
-              {line.text}
-              {i === visibleLines - 1 &&
-                visibleLines < TERMINAL_LINES.length && (
+        {/* ── Terminal body ── */}
+        <div
+          ref={scrollRef}
+          className="px-5 py-4 font-mono text-[13px] leading-relaxed min-h-[300px] max-h-[420px] overflow-y-auto cursor-text"
+        >
+          {/* ── Demo: command being typed ── */}
+          {phase !== "interactive" && (
+            <>
+              <div>
+                <span className="text-brand-500">{promptCwd} $</span>{" "}
+                <span className="text-zinc-200">
+                  {DEMO_COMMAND.slice(0, typedChars)}
+                </span>
+                {(phase === "typing" || phase === "wait") && (
                   <span className="terminal-cursor" />
                 )}
-            </div>
-          ))}
+              </div>
+
+              {/* Demo output lines */}
+              {ALL_DEMO_LINES.slice(0, visibleLines).map((line, i) => (
+                <div
+                  key={i}
+                  className={`terminal-line ${line.cls} ${line.gap ? "mt-3" : ""}`}
+                >
+                  {"  "}{line.text}
+                </div>
+              ))}
+
+              {/* Live URL line */}
+              {visibleLines >= ALL_DEMO_LINES.length && (
+                <div className="terminal-line mt-3">
+                  <span className="text-brand-400 live-dot">{"●"}</span>{" "}
+                  <span className="text-zinc-200">
+                    Live at{" "}
+                    <span className="underline decoration-zinc-700 underline-offset-2">
+                      https://portfolio.dev.sdc.cpp
+                    </span>
+                  </span>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Interactive history ── */}
+          {phase === "interactive" && (
+            <>
+              {/* Show the demo as finished history */}
+              <div>
+                <span className="text-brand-500">{promptCwd} $</span>{" "}
+                <span className="text-zinc-200">{DEMO_COMMAND}</span>
+              </div>
+              {ALL_DEMO_LINES.map((line, i) => (
+                <div key={`d-${i}`} className={`${line.cls} ${line.gap ? "mt-3" : ""}`}>
+                  {"  "}{line.text}
+                </div>
+              ))}
+              <div className="mt-3">
+                <span className="text-brand-400 live-dot">{"●"}</span>{" "}
+                <span className="text-zinc-200">
+                  Live at{" "}
+                  <span className="underline decoration-zinc-700 underline-offset-2">
+                    https://portfolio.dev.sdc.cpp
+                  </span>
+                </span>
+              </div>
+
+              <div className="mt-3 mb-1 text-zinc-600 text-[11px]">
+                {"── interactive terminal ─ type help for commands ──"}
+              </div>
+
+              {/* Command history */}
+              {history.map((line, i) => (
+                <div
+                  key={i}
+                  className={`${line.isPrompt ? "" : "text-zinc-300"} ${line.gap ? "mt-3" : ""} whitespace-pre-wrap break-all`}
+                >
+                  {line.isPrompt ? (
+                    <>
+                      <span className="text-brand-500">
+                        {line.text.split(" $ ")[0]} $
+                      </span>{" "}
+                      <span className="text-zinc-200">
+                        {line.text.split(" $ ").slice(1).join(" $ ")}
+                      </span>
+                    </>
+                  ) : (
+                    line.text
+                  )}
+                </div>
+              ))}
+
+              {/* Active input line */}
+              <div className="flex items-center">
+                <span className="text-brand-500 shrink-0">
+                  {shortCwd(cwd)} $
+                </span>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className="terminal-input"
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  autoComplete="off"
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   Feature data
-   ═══════════════════════════════════════════════════════════════ */
-
-const FEATURES = [
-  {
-    icon: <IconGitBranch className="w-5 h-5" />,
-    title: "Push to deploy",
-    description:
-      "Connect your GitHub repo and deploy on every push to main. No CI config, no YAML files.",
-  },
-  {
-    icon: <IconContainer className="w-5 h-5" />,
-    title: "LXC containers",
-    description:
-      "Lightweight Linux containers on Proxmox. Fast cold starts, full isolation, low overhead.",
-  },
-  {
-    icon: <IconLock className="w-5 h-5" />,
-    title: "Secrets & config",
-    description:
-      "Encrypted environment variables scoped per environment. Inject at build or runtime.",
-  },
-  {
-    icon: <IconGlobe className="w-5 h-5" />,
-    title: "Instant DNS",
-    description:
-      "Every deploy gets a unique *.dev.sdc.cpp URL automatically. Zero DNS configuration.",
-  },
-];
+/** Shorten cwd for prompt display */
+function shortCwd(cwd: string): string {
+  if (cwd === "~") return "~";
+  const parts = cwd.split("/");
+  if (parts.length <= 2) return cwd;
+  return parts.slice(-2).join("/");
+}
 
 /* ═══════════════════════════════════════════════════════════════
-   Page
+   Landing Page
    ═══════════════════════════════════════════════════════════════ */
 
 export default function LandingPage() {
-  const featuresRef = useScrollReveal();
-
   return (
-    <div className="landing min-h-screen">
-      <Navbar />
+    <div className="landing h-screen flex flex-col overflow-hidden relative">
+      {/* Background glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,214,143,0.07), transparent)",
+        }}
+      />
 
-      {/* ────── Hero ────── */}
-      <section className="flex flex-col items-center justify-center px-6 pt-40 pb-20 sm:pt-48 sm:pb-28">
-        <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-[clamp(2.5rem,6vw,4.25rem)] font-bold tracking-tight leading-[1.1] text-white">
-            Ship your code.
-            <br />
-            We handle the rest.
-          </h1>
+      {/* ────── Navbar ────── */}
+      <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-5xl mx-auto w-full">
+        <Link
+          href="/"
+          className="font-mono text-lg font-bold tracking-tight text-brand-500"
+        >
+          tbd
+        </Link>
 
-          <p className="mt-6 text-lg text-[var(--landing-muted)] max-w-xl mx-auto leading-relaxed">
-            A free deployment platform for SDC developers. Push to GitHub,
-            get a live URL. No cloud bills, no complexity.
-          </p>
+        <Link
+          href="/login"
+          className="text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+        >
+          Sign in
+        </Link>
+      </nav>
 
-          <p className="mt-4 text-sm text-[var(--landing-muted)] tracking-wide">
-            Built by developers, for developers.
-          </p>
+      {/* ────── Centered content ────── */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 -mt-4">
+        <h1 className="text-[clamp(1.75rem,4.5vw,3rem)] font-bold tracking-tight leading-[1.2] text-center">
+          <span className="text-white">Push to GitHub.</span>
+          <br />
+          <span className="text-zinc-500">Auto Build.</span>
+          <br />
+          <span className="text-brand-500">Deployed @ dev.sdc.cpp</span>
+        </h1>
 
-          <div className="mt-10">
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-brand-400"
-            >
-              Start deploying
-              <IconArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+        {/* Terminal */}
+        <div className="mt-8 sm:mt-10 w-full max-w-2xl">
+          <TerminalDemo />
         </div>
-      </section>
-
-      {/* ────── Terminal ────── */}
-      <section className="px-6 pb-28 sm:pb-36">
-        <TerminalDemo />
-      </section>
-
-      {/* ────── Features ────── */}
-      <section className="border-t border-[var(--landing-border)] px-6 py-24 sm:py-32">
-        <div ref={featuresRef} className="mx-auto max-w-2xl">
-          <div className="space-y-12">
-            {FEATURES.map((feature, i) => (
-              <div
-                key={feature.title}
-                data-reveal
-                className={`stagger-${i + 1} flex gap-4`}
-              >
-                <div className="flex-shrink-0 mt-0.5 text-[var(--landing-muted)]">
-                  {feature.icon}
-                </div>
-                <div>
-                  <h3 className="text-base font-medium text-[var(--landing-text)]">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-[var(--landing-muted)] leading-relaxed">
-                    {feature.description}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ────── CTA ────── */}
-      <section className="border-t border-[var(--landing-border)] px-6 py-24 sm:py-32">
-        <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            Ready to deploy?
-          </h2>
-          <p className="mt-4 text-[var(--landing-muted)]">
-            Sign in with your school credentials and ship your first project in under a minute.
-          </p>
-          <div className="mt-8">
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-2 rounded-lg bg-brand-500 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-brand-400"
-            >
-              Get started
-              <IconArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-      </section>
+      </main>
 
       {/* ────── Footer ────── */}
-      <footer className="border-t border-[var(--landing-border)] px-6 py-8">
-        <div className="mx-auto max-w-5xl flex items-center justify-between">
-          <span className="font-mono text-sm text-[var(--landing-muted)]">
-            tbd
-          </span>
-          <span className="text-sm text-[var(--landing-muted)]">
+      <footer className="relative z-10 px-6 py-4">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <span className="text-xs text-zinc-700 font-mono">tbd</span>
+          <span className="text-xs text-zinc-700">
             &copy; {new Date().getFullYear()} SDC
           </span>
         </div>

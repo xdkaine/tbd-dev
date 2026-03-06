@@ -28,7 +28,7 @@ export default function VlansPage() {
   // Check role — only staff/faculty
   if (user && user.role === "JAS_Developer") {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-red-400">
         You do not have permission to view this page.
       </p>
     );
@@ -40,8 +40,8 @@ export default function VlansPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">VLAN Management</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-zinc-100">VLAN Management</h1>
+        <p className="text-sm text-zinc-500">
           Network segmentation: VLAN tag = 1000+N, subnet = 172.16.N.0/25
         </p>
       </div>
@@ -54,56 +54,56 @@ export default function VlansPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-500">Loading VLANs...</p>
+        <p className="text-sm text-zinc-500">Loading VLANs...</p>
       ) : vlans.length === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-500">
+        <p className="py-8 text-center text-sm text-zinc-500">
           No VLANs allocated yet. VLANs are auto-allocated when projects are
           created.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
+        <div className="overflow-hidden rounded-lg border border-zinc-800">
+          <table className="min-w-full divide-y divide-zinc-800 text-sm">
+            <thead className="bg-zinc-900/50">
               <tr>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-400">
                   VLAN Tag
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-400">
                   Subnet CIDR
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-400">
                   Project
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-400">
                   Status
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-zinc-800">
               {vlans.map((v) => (
-                <tr key={v.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-mono text-xs font-semibold text-gray-900">
+                <tr key={v.id} className="hover:bg-zinc-800/50">
+                  <td className="px-4 py-2 font-mono text-xs font-semibold text-zinc-100">
                     {v.vlan_tag}
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs text-gray-700">
+                  <td className="px-4 py-2 font-mono text-xs text-zinc-300">
                     {v.subnet_cidr}
                   </td>
-                  <td className="px-4 py-2 text-xs text-gray-700">
+                  <td className="px-4 py-2 text-xs text-zinc-300">
                     {v.reserved_by_project_id ? (
-                      <code className="text-gray-600">
+                      <code className="text-zinc-400">
                         {v.reserved_by_project_id.slice(0, 8)}...
                       </code>
                     ) : (
-                      <span className="text-gray-400">Unassigned</span>
+                      <span className="text-zinc-500">Unassigned</span>
                     )}
                   </td>
                   <td className="px-4 py-2">
                     {v.reserved_by_project_id ? (
-                      <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                      <span className="inline-flex items-center rounded-full bg-green-950/30 px-2 py-0.5 text-xs font-medium text-green-400">
                         Allocated
                       </span>
                     ) : (
-                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+                      <span className="inline-flex items-center rounded-full bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-500">
                         Available
                       </span>
                     )}
@@ -120,9 +120,9 @@ export default function VlansPage() {
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-gray-200 p-4">
-      <p className="text-xs font-medium text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+      <p className="text-xs font-medium text-zinc-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-zinc-100">{value}</p>
     </div>
   );
 }

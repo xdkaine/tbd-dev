@@ -388,3 +388,39 @@ export interface AdminStats {
   vlans_available: number;
   total_network_policies: number;
 }
+
+/* Templates */
+export interface Template {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  framework: string;
+  github_owner: string;
+  github_repo: string;
+  icon_url: string | null;
+  tags: string[];
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+}
+
+export interface TemplateListResponse {
+  items: Template[];
+  total: number;
+}
+
+export interface TemplateDeployRequest {
+  repo_name: string;
+  description?: string;
+  private?: boolean;
+}
+
+export interface TemplateDeployResponse {
+  project_id: string;
+  project_slug: string;
+  repo_full_name: string;
+  repo_html_url: string;
+  build_id: string | null;
+  message: string;
+}

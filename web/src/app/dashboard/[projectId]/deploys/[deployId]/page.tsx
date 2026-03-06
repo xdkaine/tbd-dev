@@ -112,16 +112,16 @@ export default function DeployDetailPage() {
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-500">Loading deploy...</p>;
+    return <p className="text-sm text-zinc-500">Loading deploy...</p>;
   }
 
   if (error || !deploy || !project) {
     return (
       <div>
-        <p className="text-sm text-red-600">{error || "Deploy not found"}</p>
+        <p className="text-sm text-red-400">{error || "Deploy not found"}</p>
         <Link
           href={`/dashboard/${projectId}`}
-          className="mt-2 inline-block text-sm text-brand-600"
+          className="mt-2 inline-block text-sm text-brand-400"
         >
           Back to project
         </Link>
@@ -133,18 +133,18 @@ export default function DeployDetailPage() {
     <div>
       {/* Breadcrumb */}
       <div className="mb-4 text-sm">
-        <Link href="/dashboard" className="text-gray-400 hover:text-gray-600">
+        <Link href="/dashboard" className="text-zinc-500 hover:text-zinc-300">
           Projects
         </Link>
-        <span className="mx-1 text-gray-300">/</span>
+        <span className="mx-1 text-zinc-600">/</span>
         <Link
           href={`/dashboard/${projectId}`}
-          className="text-gray-400 hover:text-gray-600"
+          className="text-zinc-500 hover:text-zinc-300"
         >
           {project.name}
         </Link>
-        <span className="mx-1 text-gray-300">/</span>
-        <span className="font-medium text-gray-700">
+        <span className="mx-1 text-zinc-600">/</span>
+        <span className="font-medium text-zinc-300">
           Deploy {deploy.id.slice(0, 8)}
         </span>
       </div>
@@ -152,10 +152,10 @@ export default function DeployDetailPage() {
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">
+          <h1 className="text-xl font-bold text-zinc-100">
             Deploy {deploy.id.slice(0, 8)}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-zinc-400">
             {environment
               ? `${environment.name} (${environment.type})`
               : "Unknown environment"}
@@ -167,7 +167,7 @@ export default function DeployDetailPage() {
                   href={deploy.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-brand-600 hover:underline"
+                  className="text-brand-400 hover:underline"
                 >
                   {deploy.url.replace("http://", "")}
                 </a>
@@ -180,7 +180,7 @@ export default function DeployDetailPage() {
           <button
             onClick={handleRollback}
             disabled={rolling}
-            className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+            className="rounded-md border border-red-800 px-3 py-1.5 text-sm font-medium text-red-400 hover:bg-red-950/30 disabled:opacity-50"
           >
             {rolling ? "Rolling back..." : "Rollback"}
           </button>
@@ -188,17 +188,17 @@ export default function DeployDetailPage() {
       </div>
 
       {/* State machine pipeline */}
-      <div className="mb-8 rounded-lg border border-gray-200 bg-gray-50 p-6">
-        <h2 className="mb-4 text-sm font-semibold text-gray-700">
+      <div className="mb-8 rounded-lg border border-zinc-800 bg-zinc-900/50 p-6">
+        <h2 className="mb-4 text-sm font-semibold text-zinc-300">
           Deploy Pipeline
         </h2>
         <DeployPipeline status={deploy.status as DeployStatus} />
       </div>
 
       {/* Deploy Logs */}
-      <div className="mb-8 rounded-lg border border-gray-200 bg-gray-900 p-4">
+      <div className="mb-8 rounded-lg border border-zinc-800 bg-zinc-950 p-4">
         <div className="mb-2 flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-gray-300">Deploy Logs</h2>
+          <h2 className="text-sm font-semibold text-zinc-300">Deploy Logs</h2>
           {logStream.isStreaming && (
             <span className="inline-flex items-center gap-1 text-xs text-amber-400">
               <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
@@ -217,7 +217,7 @@ export default function DeployDetailPage() {
             {displayLogs}
           </pre>
         ) : (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-zinc-500">
             {!isTerminal
               ? "Waiting for deploy output..."
               : "No logs available for this deploy."}
@@ -231,25 +231,25 @@ export default function DeployDetailPage() {
           <StatusBadge status={deploy.status} />
         </DetailCard>
         <DetailCard label="Deploy ID">
-          <code className="text-xs text-gray-700">{deploy.id}</code>
+          <code className="text-xs text-zinc-300">{deploy.id}</code>
         </DetailCard>
         <DetailCard label="Environment">
-          <span className="text-sm text-gray-900">
+          <span className="text-sm text-zinc-100">
             {environment?.name ?? "—"} ({environment?.type ?? "—"})
           </span>
         </DetailCard>
         <DetailCard label="Artifact ID">
-          <code className="text-xs text-gray-700">
+          <code className="text-xs text-zinc-300">
             {deploy.artifact_id ?? "—"}
           </code>
         </DetailCard>
         <DetailCard label="Created">
-          <span className="text-sm text-gray-700">
+          <span className="text-sm text-zinc-300">
             {formatDate(deploy.created_at)}
           </span>
         </DetailCard>
         <DetailCard label="Promoted">
-          <span className="text-sm text-gray-700">
+          <span className="text-sm text-zinc-300">
             {deploy.promoted_at ? formatDate(deploy.promoted_at) : "—"}
           </span>
         </DetailCard>
@@ -257,7 +257,7 @@ export default function DeployDetailPage() {
 
       {/* Auto-refresh indicator */}
       {!isTerminal && (
-        <p className="mt-4 text-xs text-gray-400">
+        <p className="mt-4 text-xs text-zinc-500">
           Auto-refreshing every 5 seconds...
         </p>
       )}
@@ -273,8 +273,8 @@ function DetailCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 p-3">
-      <p className="mb-1 text-xs font-medium text-gray-500">{label}</p>
+    <div className="rounded-lg border border-zinc-800 p-3">
+      <p className="mb-1 text-xs font-medium text-zinc-500">{label}</p>
       {children}
     </div>
   );

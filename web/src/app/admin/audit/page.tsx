@@ -41,7 +41,7 @@ export default function AuditPage() {
   // Only staff/faculty
   if (user && user.role === "JAS_Developer") {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-red-400">
         You do not have permission to view this page.
       </p>
     );
@@ -52,8 +52,8 @@ export default function AuditPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-zinc-100">Audit Log</h1>
+        <p className="text-sm text-zinc-500">
           Platform activity trail — {total} total entries
         </p>
       </div>
@@ -61,7 +61,7 @@ export default function AuditPage() {
       {/* Filters */}
       <div className="mb-4 flex gap-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-700">
+          <label className="mb-1 block text-xs font-medium text-zinc-300">
             Action
           </label>
           <input
@@ -71,12 +71,12 @@ export default function AuditPage() {
               setFilterAction(e.target.value);
               setPage(0);
             }}
-            className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+            className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 placeholder-zinc-600"
             placeholder="e.g. deploy.create"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-700">
+          <label className="mb-1 block text-xs font-medium text-zinc-300">
             Target type
           </label>
           <input
@@ -86,7 +86,7 @@ export default function AuditPage() {
               setFilterTarget(e.target.value);
               setPage(0);
             }}
-            className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+            className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 placeholder-zinc-600"
             placeholder="e.g. project"
           />
         </div>
@@ -94,54 +94,54 @@ export default function AuditPage() {
 
       {/* Table */}
       {loading ? (
-        <p className="text-sm text-gray-500">Loading...</p>
+        <p className="text-sm text-zinc-500">Loading...</p>
       ) : entries.length === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-500">
+        <p className="py-8 text-center text-sm text-zinc-500">
           No audit entries found.
         </p>
       ) : (
         <>
-          <div className="overflow-hidden rounded-lg border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
+          <div className="overflow-hidden rounded-lg border border-zinc-800">
+            <table className="min-w-full divide-y divide-zinc-800 text-sm">
+              <thead className="bg-zinc-900/50">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Time
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Action
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Target
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Actor
                   </th>
-                  <th className="px-4 py-2 text-left font-medium text-gray-500">
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
                     Payload
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-zinc-800">
                 {entries.map((e) => (
-                  <tr key={e.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-2 text-xs text-gray-500">
+                  <tr key={e.id} className="hover:bg-zinc-800/50">
+                    <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-500">
                       {formatDate(e.created_at)}
                     </td>
                     <td className="px-4 py-2">
-                      <span className="inline-flex rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">
+                      <span className="inline-flex rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-zinc-300">
                         {e.action}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-xs text-gray-700">
+                    <td className="px-4 py-2 text-xs text-zinc-300">
                       {e.target_type}:{e.target_id.slice(0, 8)}
                     </td>
-                    <td className="px-4 py-2 text-xs text-gray-500">
+                    <td className="px-4 py-2 text-xs text-zinc-500">
                       {e.actor_user_id
                         ? e.actor_user_id.slice(0, 8)
                         : "system"}
                     </td>
-                    <td className="max-w-[300px] truncate px-4 py-2 font-mono text-xs text-gray-400">
+                    <td className="max-w-[300px] truncate px-4 py-2 font-mono text-xs text-zinc-500">
                       {e.payload ?? "—"}
                     </td>
                   </tr>
@@ -152,14 +152,14 @@ export default function AuditPage() {
 
           {/* Pagination */}
           <div className="mt-3 flex items-center justify-between text-sm">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-zinc-500">
               Page {page + 1} of {totalPages}
             </p>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={page === 0}
-                className="rounded border border-gray-300 px-3 py-1 text-xs disabled:opacity-50"
+                className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 disabled:opacity-50"
               >
                 Previous
               </button>
@@ -168,7 +168,7 @@ export default function AuditPage() {
                   setPage((p) => Math.min(totalPages - 1, p + 1))
                 }
                 disabled={page >= totalPages - 1}
-                className="rounded border border-gray-300 px-3 py-1 text-xs disabled:opacity-50"
+                className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 disabled:opacity-50"
               >
                 Next
               </button>

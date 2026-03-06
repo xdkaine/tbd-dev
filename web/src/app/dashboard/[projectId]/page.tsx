@@ -65,13 +65,13 @@ export default function ProjectDetailPage() {
   }, [fetchAll]);
 
   if (loading) {
-    return <p className="text-sm text-gray-500">Loading...</p>;
+    return <p className="text-sm text-zinc-500">Loading...</p>;
   }
 
   if (error || !project) {
     return (
       <div>
-        <p className="text-sm text-red-600">{error || "Project not found"}</p>
+        <p className="text-sm text-red-400">{error || "Project not found"}</p>
         <Link
           href="/dashboard"
           className="mt-2 inline-block text-sm text-brand-600 hover:text-brand-700"
@@ -105,14 +105,14 @@ export default function ProjectDetailPage() {
     <div>
       {/* Breadcrumb */}
       <div className="mb-6">
-        <div className="flex items-center gap-1.5 text-sm text-gray-400">
-          <Link href="/dashboard" className="hover:text-gray-600 transition-colors">
+        <div className="flex items-center gap-1.5 text-sm text-zinc-500">
+          <Link href="/dashboard" className="hover:text-zinc-300 transition-colors">
             Projects
           </Link>
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
           </svg>
-          <span className="font-medium text-gray-700">{project.name}</span>
+          <span className="font-medium text-zinc-300">{project.name}</span>
         </div>
       </div>
 
@@ -121,26 +121,26 @@ export default function ProjectDetailPage() {
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
             {/* Project icon */}
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-zinc-800 bg-gradient-to-br from-zinc-900/50 to-zinc-800">
               {project.framework ? (
-                <span className="text-lg font-bold text-gray-600">
+                <span className="text-lg font-bold text-zinc-400">
                   {project.framework.charAt(0).toUpperCase()}
                 </span>
               ) : (
-                <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg className="h-6 w-6 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
                 </svg>
               )}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{project.name}</h1>
-              <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+              <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">{project.name}</h1>
+              <div className="mt-1 flex items-center gap-2 text-sm text-zinc-500">
                 {project.repo?.repo_full_name && (
                   <a
                     href={`https://github.com/${project.repo.repo_full_name}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-gray-500 hover:text-gray-700 transition-colors"
+                    className="inline-flex items-center gap-1 text-zinc-500 hover:text-zinc-300 transition-colors"
                   >
                     <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
                       <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
@@ -149,17 +149,17 @@ export default function ProjectDetailPage() {
                   </a>
                 )}
                 {project.repo?.repo_full_name && project.framework && (
-                  <span className="text-gray-300">|</span>
+                  <span className="text-zinc-600">|</span>
                 )}
                 {project.framework && (
-                  <span className="inline-flex items-center rounded-md bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-200">
+                  <span className="inline-flex items-center rounded-md bg-brand-950/50 px-2 py-0.5 text-xs font-medium text-brand-400 ring-1 ring-inset ring-brand-800">
                     {project.framework}
                   </span>
                 )}
                 {project.repo?.default_branch && (
                   <>
-                    <span className="text-gray-300">|</span>
-                    <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                    <span className="text-zinc-600">|</span>
+                    <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
                       <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.556a4.5 4.5 0 00-1.242-7.244l4.5-4.5a4.5 4.5 0 016.364 6.364L17.7 8.188" />
                       </svg>
@@ -178,7 +178,7 @@ export default function ProjectDetailPage() {
                 href={productionUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-200 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-300 transition-colors"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
@@ -191,7 +191,7 @@ export default function ProjectDetailPage() {
                 href={`https://github.com/${project.repo.repo_full_name}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800/50 transition-colors"
               >
                 <svg className="h-4 w-4" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
@@ -205,23 +205,23 @@ export default function ProjectDetailPage() {
       {/* Production URL display */}
       {productionUrl && (
         <div className="mt-4 flex items-center gap-2 text-sm">
-          <span className="inline-flex h-2 w-2 rounded-full bg-green-500 shadow-sm shadow-green-200" />
+          <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
           <a
             href={productionUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-medium text-gray-700 hover:text-brand-600 transition-colors"
+            className="font-medium text-zinc-300 hover:text-brand-600 transition-colors"
           >
             {productionUrl.replace(/^https?:\/\//, "")}
           </a>
           {project.production_url && latestActiveDeploy?.url && project.production_url !== latestActiveDeploy.url && (
-            <>
-              <span className="text-gray-300">|</span>
+              <>
+              <span className="text-zinc-600">|</span>
               <a
                 href={latestActiveDeploy.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-gray-400 hover:text-brand-600 transition-colors"
+                className="text-xs text-zinc-500 hover:text-brand-600 transition-colors"
                 title="Immutable deploy URL"
               >
                 {latestActiveDeploy.url.replace(/^https?:\/\//, "")}
@@ -241,7 +241,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Tab navigation */}
-      <div className="mb-6 border-b border-gray-200">
+      <div className="mb-6 border-b border-zinc-800">
         <nav className="-mb-px flex space-x-1">
           {tabs.map((t) => (
             <button
@@ -249,22 +249,22 @@ export default function ProjectDetailPage() {
               onClick={() => setTab(t.key)}
               className={`relative whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors ${
                 tab === t.key
-                  ? "text-gray-900"
-                  : "text-gray-500 hover:text-gray-700"
+                  ? "text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
               {t.label}
               {t.count !== undefined && t.count > 0 && (
                 <span className={`ml-1.5 rounded-full px-2 py-0.5 text-xs ${
                   tab === t.key
-                    ? "bg-brand-50 text-brand-700"
-                    : "bg-gray-100 text-gray-500"
+                    ? "bg-brand-950/50 text-brand-400"
+                    : "bg-zinc-800 text-zinc-500"
                 }`}>
                   {t.count}
                 </span>
               )}
               {tab === t.key && (
-                <span className="absolute inset-x-0 -bottom-px h-0.5 bg-gray-900 rounded-full" />
+                <span className="absolute inset-x-0 -bottom-px h-0.5 bg-zinc-100 rounded-full" />
               )}
             </button>
           ))}
@@ -435,10 +435,10 @@ function OverviewTab({
     <div className="space-y-6">
       {/* Production deployment card */}
       {featuredDeploy ? (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 bg-gray-50/50 px-6 py-3">
+        <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
+          <div className="border-b border-zinc-800 bg-zinc-900/50 px-6 py-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900">
+              <h3 className="text-sm font-semibold text-zinc-100">
                 {prodEnv ? "Production Deployment" : "Latest Deployment"}
               </h3>
               <Link
@@ -454,27 +454,27 @@ function OverviewTab({
               <div className="flex items-center gap-4">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${
                   featuredDeploy.status === "active" || featuredDeploy.status === "healthy"
-                    ? "bg-green-50"
+                    ? "bg-green-950/30"
                     : featuredDeploy.status === "failed"
-                      ? "bg-red-50"
+                      ? "bg-red-950/30"
                       : featuredDeploy.status === "stopped"
-                        ? "bg-amber-50"
-                        : "bg-gray-50"
+                        ? "bg-amber-950/30"
+                        : "bg-zinc-900/50"
                 }`}>
                   {featuredDeploy.status === "active" || featuredDeploy.status === "healthy" ? (
-                    <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <svg className="h-5 w-5 text-green-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   ) : featuredDeploy.status === "failed" ? (
-                    <svg className="h-5 w-5 text-red-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
                     </svg>
                   ) : featuredDeploy.status === "stopped" ? (
-                    <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <svg className="h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
                     </svg>
                   ) : (
-                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <svg className="h-5 w-5 text-zinc-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   )}
@@ -482,7 +482,7 @@ function OverviewTab({
                 <div>
                   <div className="flex items-center gap-2">
                     <StatusBadge status={featuredDeploy.status} />
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-zinc-500">
                       {envMap[featuredDeploy.env_id]?.name ?? "Unknown"}
                     </span>
                   </div>
@@ -491,19 +491,19 @@ function OverviewTab({
                       href={featuredDeploy.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-1 block text-sm font-medium text-gray-700 hover:text-brand-600 transition-colors"
+                      className="mt-1 block text-sm font-medium text-zinc-300 hover:text-brand-600 transition-colors"
                     >
                       {featuredDeploy.url.replace(/^https?:\/\//, "")}
                     </a>
                   ) : (
-                    <p className="mt-1 text-sm text-gray-400">No URL assigned</p>
+                    <p className="mt-1 text-sm text-zinc-500">No URL assigned</p>
                   )}
                   {project.production_url && featuredDeploy.url !== project.production_url && (
                     <a
                       href={project.production_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block text-xs text-green-600 hover:text-green-700 transition-colors"
+                      className="block text-xs text-green-400 hover:text-green-300 transition-colors"
                       title="Persistent production URL"
                     >
                       {project.production_url.replace(/^https?:\/\//, "")}
@@ -512,19 +512,19 @@ function OverviewTab({
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500">{timeAgo(featuredDeploy.created_at)}</p>
-                <p className="mt-0.5 text-xs text-gray-400">{formatDate(featuredDeploy.created_at)}</p>
+                <p className="text-xs text-zinc-500">{timeAgo(featuredDeploy.created_at)}</p>
+                <p className="mt-0.5 text-xs text-zinc-500">{formatDate(featuredDeploy.created_at)}</p>
               </div>
             </div>
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 p-8 text-center">
-          <svg className="mx-auto h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-900/50 p-8 text-center">
+          <svg className="mx-auto h-8 w-8 text-zinc-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.841m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
           </svg>
-          <p className="mt-3 text-sm font-medium text-gray-600">No deployments yet</p>
-          <p className="mt-1 text-xs text-gray-400">Push to your connected repository to trigger the first deployment.</p>
+          <p className="mt-3 text-sm font-medium text-zinc-400">No deployments yet</p>
+          <p className="mt-1 text-xs text-zinc-500">Push to your connected repository to trigger the first deployment.</p>
         </div>
       )}
 
@@ -532,28 +532,28 @@ function OverviewTab({
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <button
           onClick={() => onNavigate("deploys")}
-          className="rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm hover:border-gray-300 hover:shadow transition-all"
+          className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 text-left hover:border-zinc-700 hover:bg-zinc-800/50 transition-all"
         >
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Deploys</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{stats.totalDeploys}</p>
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Total Deploys</p>
+          <p className="mt-2 text-2xl font-bold text-zinc-100">{stats.totalDeploys}</p>
           {stats.failedDeploys > 0 && (
             <p className="mt-1 text-xs text-red-500">{stats.failedDeploys} failed</p>
           )}
         </button>
         <button
           onClick={() => onNavigate("builds")}
-          className="rounded-xl border border-gray-200 bg-white p-4 text-left shadow-sm hover:border-gray-300 hover:shadow transition-all"
+          className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 text-left hover:border-zinc-700 hover:bg-zinc-800/50 transition-all"
         >
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Builds</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{stats.totalBuilds}</p>
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Total Builds</p>
+          <p className="mt-2 text-2xl font-bold text-zinc-100">{stats.totalBuilds}</p>
         </button>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Success Rate</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Success Rate</p>
+          <p className="mt-2 text-2xl font-bold text-zinc-100">
             {stats.totalBuilds > 0 ? `${stats.successRate}%` : "—"}
           </p>
           {stats.totalBuilds > 0 && (
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
               <div
                 className={`h-full rounded-full transition-all ${
                   stats.successRate >= 80
@@ -567,17 +567,17 @@ function OverviewTab({
             </div>
           )}
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Build Time</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{stats.avgBuildTime}</p>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Avg Build Time</p>
+          <p className="mt-2 text-2xl font-bold text-zinc-100">{stats.avgBuildTime}</p>
         </div>
       </div>
 
       {/* Two-column: Activity chart + Recent activity */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Deploy activity chart */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h3 className="mb-4 text-sm font-semibold text-gray-900">Deploy Activity</h3>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
+          <h3 className="mb-4 text-sm font-semibold text-zinc-100">Deploy Activity</h3>
           <div className="flex items-end gap-1" style={{ height: "120px" }}>
             {activityData.map((d, i) => (
               <div key={i} className="group relative flex flex-1 flex-col items-center justify-end h-full">
@@ -585,7 +585,7 @@ function OverviewTab({
                   className={`w-full rounded-t transition-all ${
                     d.count > 0
                       ? "bg-brand-500 group-hover:bg-brand-600"
-                      : "bg-gray-100"
+                      : "bg-zinc-800"
                   }`}
                   style={{
                     height: d.count > 0 ? `${Math.max((d.count / maxActivity) * 100, 8)}%` : "4px",
@@ -594,23 +594,23 @@ function OverviewTab({
                 />
                 {/* Tooltip */}
                 <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="whitespace-nowrap rounded bg-gray-900 px-2 py-1 text-xs text-white shadow-lg">
+                  <div className="whitespace-nowrap rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-200 shadow-lg">
                     {d.count} deploy{d.count !== 1 ? "s" : ""}
                   </div>
                 </div>
               </div>
             ))}
           </div>
-          <div className="mt-2 flex justify-between text-[10px] text-gray-400">
+          <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
             <span>{activityData[0]?.label}</span>
             <span>Today</span>
           </div>
         </div>
 
         {/* Recent activity feed */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">Recent Activity</h3>
+            <h3 className="text-sm font-semibold text-zinc-100">Recent Activity</h3>
             <button
               onClick={() => onNavigate("deploys")}
               className="text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors"
@@ -619,14 +619,14 @@ function OverviewTab({
             </button>
           </div>
           {recentDeploys.length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-400">No recent activity</p>
+            <p className="py-6 text-center text-sm text-zinc-500">No recent activity</p>
           ) : (
             <div className="space-y-3">
               {recentDeploys.map((d) => (
                 <Link
                   key={d.id}
                   href={`/dashboard/${projectId}/deploys/${d.id}`}
-                  className="flex items-center gap-3 rounded-lg p-2 -mx-2 hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-3 rounded-lg p-2 -mx-2 hover:bg-zinc-800/50 transition-colors"
                 >
                   <div className={`h-2 w-2 rounded-full shrink-0 ${
                     d.status === "active" || d.status === "healthy"
@@ -637,22 +637,22 @@ function OverviewTab({
                           ? "bg-yellow-500"
                           : d.status === "stopped"
                             ? "bg-amber-500"
-                            : "bg-gray-300"
+                            : "bg-zinc-600"
                   }`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900 truncate">
+                      <span className="text-sm font-medium text-zinc-100 truncate">
                         {envMap[d.env_id]?.name ?? "Deploy"}
                       </span>
                       <StatusBadge status={d.status} />
                     </div>
                     {d.url && (
-                      <p className="text-xs text-gray-400 truncate">
+                      <p className="text-xs text-zinc-500 truncate">
                         {d.url.replace(/^https?:\/\//, "")}
                       </p>
                     )}
                   </div>
-                  <span className="text-xs text-gray-400 shrink-0">
+                  <span className="text-xs text-zinc-500 shrink-0">
                     {timeAgo(d.created_at)}
                   </span>
                 </Link>
@@ -664,9 +664,9 @@ function OverviewTab({
 
       {/* Recent builds */}
       {recentBuilds.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-            <h3 className="text-sm font-semibold text-gray-900">Recent Builds</h3>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50">
+          <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
+            <h3 className="text-sm font-semibold text-zinc-100">Recent Builds</h3>
             <button
               onClick={() => onNavigate("builds")}
               className="text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors"
@@ -674,17 +674,17 @@ function OverviewTab({
               View all
             </button>
           </div>
-          <div className="divide-y divide-gray-50">
+          <div className="divide-y divide-zinc-800/50">
             {recentBuilds.map((b) => (
-              <div key={b.id} className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50/50 transition-colors">
+              <div key={b.id} className="flex items-center gap-4 px-5 py-3 hover:bg-zinc-800/50 transition-colors">
                 <StatusBadge status={b.status} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs text-gray-700">
+                    <span className="font-mono text-xs text-zinc-300">
                       {b.commit_sha.slice(0, 8)}
                     </span>
                     {b.branch && (
-                      <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+                      <span className="inline-flex items-center gap-1 rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">
                         <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.556a4.5 4.5 0 00-1.242-7.244l4.5-4.5a4.5 4.5 0 016.364 6.364L17.7 8.188" />
                         </svg>
@@ -694,10 +694,10 @@ function OverviewTab({
                     {b.trigger && (
                       <span className={`rounded px-1.5 py-0.5 text-xs ${
                         b.trigger === "push"
-                          ? "bg-blue-50 text-blue-700"
+                          ? "bg-blue-950/30 text-blue-400"
                           : b.trigger === "pull_request"
-                            ? "bg-purple-50 text-purple-700"
-                            : "bg-gray-50 text-gray-600"
+                            ? "bg-purple-950/30 text-purple-400"
+                            : "bg-zinc-900/50 text-zinc-400"
                       }`}>
                         {b.trigger === "pull_request" ? "PR" : b.trigger}
                       </span>
@@ -705,9 +705,9 @@ function OverviewTab({
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-xs text-gray-500">{b.started_at ? timeAgo(b.started_at) : "—"}</p>
+                  <p className="text-xs text-zinc-500">{b.started_at ? timeAgo(b.started_at) : "—"}</p>
                   {b.started_at && b.finished_at && (
-                    <p className="text-xs text-gray-400">{formatDuration(b.started_at, b.finished_at)}</p>
+                    <p className="text-xs text-zinc-500">{formatDuration(b.started_at, b.finished_at)}</p>
                   )}
                 </div>
               </div>
@@ -718,9 +718,9 @@ function OverviewTab({
 
       {/* Environments summary */}
       {environments.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
-            <h3 className="text-sm font-semibold text-gray-900">Environments</h3>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50">
+          <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
+            <h3 className="text-sm font-semibold text-zinc-100">Environments</h3>
             <button
               onClick={() => onNavigate("environments")}
               className="text-xs font-medium text-brand-600 hover:text-brand-700 transition-colors"
@@ -728,30 +728,30 @@ function OverviewTab({
               Manage
             </button>
           </div>
-          <div className="grid gap-px bg-gray-100 sm:grid-cols-3">
+          <div className="grid gap-px bg-zinc-800 sm:grid-cols-3">
             {environments.map((env) => {
               const envDeploys = deploys.filter((d) => d.env_id === env.id);
               const activeDeploy = envDeploys.find(
                 (d) => d.status === "active" || d.status === "healthy",
               );
               return (
-                <div key={env.id} className="bg-white p-4">
+                <div key={env.id} className="bg-zinc-900/50 p-4">
                   <div className="flex items-center gap-2">
                     <span className={`h-2 w-2 rounded-full ${
-                      activeDeploy ? "bg-green-500" : "bg-gray-300"
+                      activeDeploy ? "bg-green-500" : "bg-zinc-600"
                     }`} />
-                    <span className="text-sm font-medium text-gray-900">{env.name}</span>
+                    <span className="text-sm font-medium text-zinc-100">{env.name}</span>
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
                       env.type === "production"
-                        ? "bg-green-50 text-green-700"
+                        ? "bg-green-950/30 text-green-400"
                         : env.type === "staging"
-                          ? "bg-yellow-50 text-yellow-700"
-                          : "bg-gray-100 text-gray-600"
+                          ? "bg-amber-950/30 text-amber-400"
+                          : "bg-zinc-800 text-zinc-400"
                     }`}>
                       {env.type}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-gray-400">
+                  <p className="mt-1 text-xs text-zinc-500">
                     {envDeploys.length} deploy{envDeploys.length !== 1 ? "s" : ""}
                     {activeDeploy?.url && (
                       <>
@@ -839,13 +839,13 @@ function RepoConnectionBanner({
 
   if (!showPicker) {
     return (
-      <div className="mt-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4">
-        <p className="text-sm text-gray-600">
+      <div className="mt-3 rounded-lg border border-dashed border-zinc-800 bg-zinc-900/50 p-4">
+        <p className="text-sm text-zinc-400">
           Connect a GitHub repository to enable automatic builds and deploys.
         </p>
         <button
           onClick={handleOpen}
-          className="mt-2 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
+          className="mt-2 rounded-md bg-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-zinc-300"
         >
           Connect repository
         </button>
@@ -854,23 +854,23 @@ function RepoConnectionBanner({
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-gray-200 bg-white p-4">
+    <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-900">
+        <h3 className="text-sm font-semibold text-zinc-100">
           Select a repository
         </h3>
         <button
           onClick={() => setShowPicker(false)}
-          className="text-xs text-gray-500 hover:text-gray-700"
+          className="text-xs text-zinc-500 hover:text-zinc-300"
         >
           Cancel
         </button>
       </div>
 
-      {error && <p className="mb-2 text-xs text-red-600">{error}</p>}
+      {error && <p className="mb-2 text-xs text-red-400">{error}</p>}
 
       {loadingRepos ? (
-        <p className="text-sm text-gray-500">Loading repositories...</p>
+        <p className="text-sm text-zinc-500">Loading repositories...</p>
       ) : (
         <>
           <input
@@ -878,11 +878,11 @@ function RepoConnectionBanner({
             placeholder="Search repositories..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="mb-3 block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="mb-3 block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
           />
           <div className="max-h-60 space-y-1 overflow-y-auto">
             {filtered.length === 0 ? (
-              <p className="py-4 text-center text-sm text-gray-500">
+              <p className="py-4 text-center text-sm text-zinc-500">
                 {repos.length === 0
                   ? "No repositories found. Connect your GitHub account in Settings first."
                   : "No matching repositories."}
@@ -893,25 +893,25 @@ function RepoConnectionBanner({
                   key={repo.id}
                   onClick={() => handleConnect(repo)}
                   disabled={connecting}
-                  className="flex w-full items-center justify-between rounded-md border border-gray-100 px-3 py-2 text-left hover:bg-gray-50 disabled:opacity-50"
+                  className="flex w-full items-center justify-between rounded-md border border-zinc-800 px-3 py-2 text-left hover:bg-zinc-800/50 disabled:opacity-50"
                 >
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-zinc-100">
                       {repo.full_name}
                     </p>
                     {repo.description && (
-                      <p className="text-xs text-gray-500 truncate max-w-md">
+                      <p className="text-xs text-zinc-500 truncate max-w-md">
                         {repo.description}
                       </p>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     {repo.private && (
-                      <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-700">
+                      <span className="rounded bg-amber-950/30 px-1.5 py-0.5 text-xs text-amber-400">
                         private
                       </span>
                     )}
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-zinc-500">
                       {repo.default_branch}
                     </span>
                   </div>
@@ -1007,7 +1007,7 @@ function DeploysTab({
 
   if (deploys.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-gray-500">
+      <p className="py-8 text-center text-sm text-zinc-500">
         No deploys yet. Push to your connected repo to trigger a deploy.
       </p>
     );
@@ -1017,51 +1017,51 @@ function DeploysTab({
     <div>
       {/* Production URL banner */}
       {project.production_url && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg border border-green-200 bg-green-50/50 px-4 py-3">
-          <span className="inline-flex h-2 w-2 rounded-full bg-green-500 shadow-sm shadow-green-200" />
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-green-800 bg-green-950/30 px-4 py-3">
+          <span className="inline-flex h-2 w-2 rounded-full bg-green-500" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Production URL</p>
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Production URL</p>
             <a
               href={project.production_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm font-medium text-gray-900 hover:text-brand-600 transition-colors truncate block"
+              className="text-sm font-medium text-zinc-100 hover:text-brand-600 transition-colors truncate block"
             >
               {project.production_url.replace(/^https?:\/\//, "")}
             </a>
           </div>
-          <span className="text-xs text-gray-400">Always points to active deploy</span>
+          <span className="text-xs text-zinc-500">Always points to active deploy</span>
         </div>
       )}
 
       {actionError && (
-        <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2">
-          <p className="text-xs text-red-700">{actionError}</p>
+        <div className="mb-3 rounded-md border border-red-800 bg-red-950/30 px-3 py-2">
+          <p className="text-xs text-red-400">{actionError}</p>
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-zinc-800">
+        <table className="min-w-full divide-y divide-zinc-800 text-sm">
+          <thead className="bg-zinc-900/50">
             <tr>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">
+              <th className="px-4 py-2 text-left font-medium text-zinc-500">
                 Status
               </th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">
+              <th className="px-4 py-2 text-left font-medium text-zinc-500">
                 Environment
               </th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">
+              <th className="px-4 py-2 text-left font-medium text-zinc-500">
                 URLs
               </th>
-              <th className="px-4 py-2 text-left font-medium text-gray-500">
+              <th className="px-4 py-2 text-left font-medium text-zinc-500">
                 Created
               </th>
-              <th className="px-4 py-2 text-right font-medium text-gray-500">
+              <th className="px-4 py-2 text-right font-medium text-zinc-500">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-zinc-800">
             {deploys.map((d) => {
               const isActive = d.status === "active" || d.status === "healthy";
               const isStopped = d.status === "stopped";
@@ -1072,13 +1072,13 @@ function DeploysTab({
               const canDestroy = !isTerminal;
 
               return (
-                <tr key={d.id} className="hover:bg-gray-50">
+                <tr key={d.id} className="hover:bg-zinc-800/50">
                   <td className="px-4 py-2">
                     <Link href={`/dashboard/${projectId}/deploys/${d.id}`}>
                       <StatusBadge status={d.status} />
                     </Link>
                   </td>
-                  <td className="px-4 py-2 text-gray-700">
+                  <td className="px-4 py-2 text-zinc-300">
                     {envMap[d.env_id]?.name ?? d.env_id.slice(0, 8)}
                   </td>
                   <td className="px-4 py-2">
@@ -1098,7 +1098,7 @@ function DeploysTab({
                             href={project.production_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-green-600 hover:underline text-xs block"
+                            className="text-green-400 hover:underline text-xs block"
                             title="Production URL (always points to active deploy)"
                           >
                             {project.production_url.replace(/^https?:\/\//, "")}
@@ -1106,10 +1106,10 @@ function DeploysTab({
                         )}
                       </div>
                     ) : (
-                      <span className="text-gray-400">—</span>
+                      <span className="text-zinc-500">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-gray-500">
+                  <td className="px-4 py-2 text-zinc-500">
                     {timeAgo(d.created_at)}
                   </td>
                   <td className="px-4 py-2 text-right">
@@ -1119,7 +1119,7 @@ function DeploysTab({
                         <button
                           onClick={() => handleStart(d.id)}
                           disabled={starting === d.id}
-                          className="inline-flex items-center gap-1 rounded-md border border-green-200 px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-50 disabled:opacity-50 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-md border border-green-800 px-2 py-1 text-xs font-medium text-green-400 hover:bg-green-950/30 disabled:opacity-50 transition-colors"
                           title="Start container"
                         >
                           {starting === d.id ? (
@@ -1139,7 +1139,7 @@ function DeploysTab({
                         <button
                           onClick={() => handleStop(d.id)}
                           disabled={stopping === d.id}
-                          className="inline-flex items-center gap-1 rounded-md border border-amber-200 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-md border border-amber-800 px-2 py-1 text-xs font-medium text-amber-400 hover:bg-amber-950/30 disabled:opacity-50 transition-colors"
                           title="Stop container (preserves data)"
                         >
                           {stopping === d.id ? (
@@ -1159,7 +1159,7 @@ function DeploysTab({
                         <button
                           onClick={() => handleRollback(d.id)}
                           disabled={rolling === d.id}
-                          className="inline-flex items-center gap-1 rounded-md border border-orange-200 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-50 disabled:opacity-50 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-md border border-orange-800 px-2 py-1 text-xs font-medium text-orange-400 hover:bg-orange-950/30 disabled:opacity-50 transition-colors"
                           title="Rollback to previous successful deploy"
                         >
                           {rolling === d.id ? (
@@ -1178,7 +1178,7 @@ function DeploysTab({
                       {canDestroy && (
                         <button
                           onClick={() => setDestroyTarget(d)}
-                          className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-md border border-red-800 px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-950/30 transition-colors"
                           title="Destroy deploy and container"
                         >
                           <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -1376,7 +1376,7 @@ function BuildsTab({
     <div>
       {/* Header with rebuild button */}
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">
+        <h3 className="text-sm font-medium text-zinc-100">
           {builds.length > 0
             ? `${builds.length} build${builds.length !== 1 ? "s" : ""}`
             : "No builds yet"}
@@ -1385,7 +1385,7 @@ function BuildsTab({
           <button
             onClick={handleRebuild}
             disabled={rebuilding}
-            className="inline-flex items-center gap-1.5 rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md bg-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-zinc-300 disabled:opacity-50"
           >
             {rebuilding ? (
               "Triggering..."
@@ -1412,78 +1412,78 @@ function BuildsTab({
       </div>
 
       {rebuildError && (
-        <p className="mb-3 text-xs text-red-600">{rebuildError}</p>
+        <p className="mb-3 text-xs text-red-400">{rebuildError}</p>
       )}
 
       {builds.length === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-500">
+        <p className="py-8 text-center text-sm text-zinc-500">
           {hasRepo
             ? "No builds yet. Click Rebuild to trigger the first build."
             : "No builds yet. Connect a repository to start building."}
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
+        <div className="overflow-hidden rounded-lg border border-zinc-800">
+          <table className="min-w-full divide-y divide-zinc-800 text-sm">
+            <thead className="bg-zinc-900/50">
               <tr>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-500">
                   Status
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-500">
                   Trigger
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-500">
                   Commit
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-500">
                   Branch
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-500">
                   Started
                 </th>
-                <th className="px-4 py-2 text-left font-medium text-gray-500">
+                <th className="px-4 py-2 text-left font-medium text-zinc-500">
                   Duration
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-gray-500">
+                <th className="px-4 py-2 text-right font-medium text-zinc-500">
                   Logs
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-zinc-800">
               {builds.map((b) => (
-                <tr key={b.id} className="hover:bg-gray-50">
+                <tr key={b.id} className="hover:bg-zinc-800/50">
                   <td className="px-4 py-2">
                     <StatusBadge status={b.status} />
                   </td>
-                  <td className="px-4 py-2 text-xs text-gray-500">
+                  <td className="px-4 py-2 text-xs text-zinc-500">
                     {b.trigger === "push" ? (
-                      <span className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">
+                      <span className="inline-flex items-center rounded bg-blue-950/30 px-1.5 py-0.5 text-blue-400">
                         push
                       </span>
                     ) : b.trigger === "pull_request" ? (
-                      <span className="inline-flex items-center rounded bg-purple-50 px-1.5 py-0.5 text-purple-700">
+                      <span className="inline-flex items-center rounded bg-purple-950/30 px-1.5 py-0.5 text-purple-400">
                         PR
                       </span>
                     ) : b.trigger === "manual" ? (
-                      <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-amber-700">
+                      <span className="inline-flex items-center rounded bg-amber-950/30 px-1.5 py-0.5 text-amber-400">
                         manual
                       </span>
                     ) : (
-                      <span className="inline-flex items-center rounded bg-gray-50 px-1.5 py-0.5 text-gray-600">
+                      <span className="inline-flex items-center rounded bg-zinc-900/50 px-1.5 py-0.5 text-zinc-400">
                         {b.trigger}
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs text-gray-700">
+                  <td className="px-4 py-2 font-mono text-xs text-zinc-300">
                     {b.commit_sha.slice(0, 8)}
                   </td>
-                  <td className="px-4 py-2 text-xs text-gray-500">
+                  <td className="px-4 py-2 text-xs text-zinc-500">
                     {b.branch ?? "—"}
                   </td>
-                  <td className="px-4 py-2 text-gray-500">
+                  <td className="px-4 py-2 text-zinc-500">
                     {b.started_at ? timeAgo(b.started_at) : "—"}
                   </td>
-                  <td className="px-4 py-2 text-xs text-gray-500">
+                  <td className="px-4 py-2 text-xs text-zinc-500">
                     {b.started_at && b.finished_at
                       ? formatDuration(b.started_at, b.finished_at)
                       : b.started_at && !b.finished_at
@@ -1507,10 +1507,10 @@ function BuildsTab({
 
       {/* Build Logs viewer */}
       {viewingLogs && (
-        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-900 p-4">
+        <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950 p-4">
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <h4 className="text-sm font-medium text-gray-300">Build Logs</h4>
+              <h4 className="text-sm font-medium text-zinc-300">Build Logs</h4>
               {(viewedBuildRunning && buildLogStream.isStreaming) && (
                 <span className="inline-flex items-center gap-1 text-xs text-amber-400">
                   <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
@@ -1525,13 +1525,13 @@ function BuildsTab({
                 setLinkedDeployId(null);
                 setDeployLogs(null);
               }}
-              className="text-xs text-gray-500 hover:text-gray-300"
+              className="text-xs text-zinc-500 hover:text-zinc-300"
             >
               Close
             </button>
           </div>
           {loadingLogs ? (
-            <p className="text-sm text-gray-500">Loading logs...</p>
+            <p className="text-sm text-zinc-500">Loading logs...</p>
           ) : displayBuildLogs ? (
             <pre
               ref={logsEndRef}
@@ -1540,7 +1540,7 @@ function BuildsTab({
               {displayBuildLogs}
             </pre>
           ) : (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-zinc-500">
               {viewedBuildRunning
                 ? "Waiting for build output..."
                 : "No logs available for this build."}
@@ -1551,9 +1551,9 @@ function BuildsTab({
 
       {/* Deploy Logs viewer (shown when a build triggers a deploy) */}
       {viewingLogs && linkedDeployId && (displayDeployLogs || deployLogStream.isStreaming) && (
-        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-900 p-4">
+        <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950 p-4">
           <div className="mb-2 flex items-center gap-2">
-            <h4 className="text-sm font-medium text-gray-300">Deploy Logs</h4>
+            <h4 className="text-sm font-medium text-zinc-300">Deploy Logs</h4>
             {deployLogStream.isStreaming && (
               <span className="inline-flex items-center gap-1 text-xs text-amber-400">
                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
@@ -1575,7 +1575,7 @@ function BuildsTab({
               {displayDeployLogs}
             </pre>
           ) : (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-zinc-500">
               Waiting for deploy output...
             </p>
           )}
@@ -1638,7 +1638,7 @@ function EnvironmentsTab({
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">Environments</h3>
+        <h3 className="text-sm font-medium text-zinc-100">Environments</h3>
         <button
           onClick={() => setShowCreate(true)}
           className="text-xs font-medium text-brand-600 hover:text-brand-700"
@@ -1650,10 +1650,10 @@ function EnvironmentsTab({
       {showCreate && (
         <form
           onSubmit={handleCreate}
-          className="mb-4 flex items-end gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3"
+          className="mb-4 flex items-end gap-3 rounded-lg border border-zinc-800 bg-zinc-900/50 p-3"
         >
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Name
             </label>
             <input
@@ -1661,18 +1661,18 @@ function EnvironmentsTab({
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+              className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 placeholder-zinc-600"
               placeholder="staging"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Type
             </label>
             <select
               value={envType}
               onChange={(e) => setEnvType(e.target.value as typeof envType)}
-              className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+              className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200"
             >
               <option value="production">Production</option>
               <option value="staging">Staging</option>
@@ -1682,23 +1682,23 @@ function EnvironmentsTab({
           <button
             type="submit"
             disabled={creating}
-            className="rounded-md bg-brand-600 px-3 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            className="rounded-md bg-brand-500 px-3 py-1 text-xs font-medium text-black hover:bg-brand-400 disabled:opacity-50"
           >
             Create
           </button>
           <button
             type="button"
             onClick={() => setShowCreate(false)}
-            className="text-xs text-gray-500 hover:text-gray-700"
+            className="text-xs text-zinc-500 hover:text-zinc-300"
           >
             Cancel
           </button>
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-red-400">{error}</p>}
         </form>
       )}
 
       {environments.length === 0 ? (
-        <p className="py-8 text-center text-sm text-gray-500">
+        <p className="py-8 text-center text-sm text-zinc-500">
           No environments configured.
         </p>
       ) : (
@@ -1706,16 +1706,16 @@ function EnvironmentsTab({
           {environments.map((env) => (
             <div
               key={env.id}
-              className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3"
+              className="flex items-center justify-between rounded-lg border border-zinc-800 px-4 py-3"
             >
               <div>
-                <p className="text-sm font-medium text-gray-900">{env.name}</p>
-                <p className="text-xs text-gray-500">
+                <p className="text-sm font-medium text-zinc-100">{env.name}</p>
+                <p className="text-xs text-zinc-500">
                   Type: {env.type}
                   {env.vlan_id && ` | VLAN assigned`}
                 </p>
               </div>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-zinc-500">
                 {timeAgo(env.created_at)}
               </p>
             </div>
@@ -1892,17 +1892,17 @@ function SettingsTab({
   return (
     <div className="space-y-6">
       {/* Connected repository */}
-      <div className="rounded-lg border border-gray-200 p-4">
-        <h3 className="mb-3 text-sm font-semibold text-gray-900">
+      <div className="rounded-lg border border-zinc-800 p-4">
+        <h3 className="mb-3 text-sm font-semibold text-zinc-100">
           Connected Repository
         </h3>
         {project.repo ? (
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-medium text-zinc-100">
                 {project.repo.repo_full_name}
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-zinc-500">
                 Branch: {project.repo.default_branch} | Provider:{" "}
                 {project.repo.provider}
               </p>
@@ -1910,26 +1910,26 @@ function SettingsTab({
             <button
               onClick={() => setShowDisconnectModal(true)}
               disabled={disconnecting}
-              className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="rounded-md border border-red-800 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-950/30 disabled:opacity-50"
             >
               Disconnect
             </button>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-zinc-500">
             No repository connected. Use the banner above to connect one.
           </p>
         )}
       </div>
 
       {/* Auto-deploy toggle */}
-      <div className="rounded-lg border border-gray-200 p-4">
-        <h3 className="mb-3 text-sm font-semibold text-gray-900">
+      <div className="rounded-lg border border-zinc-800 p-4">
+        <h3 className="mb-3 text-sm font-semibold text-zinc-100">
           Auto Deploy
         </h3>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-zinc-300">
               Automatically build and deploy when code is pushed to the default
               branch.
             </p>
@@ -1937,8 +1937,8 @@ function SettingsTab({
           <button
             onClick={handleToggleAutoDeploy}
             disabled={saving}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 ${
-              autoDeploy ? "bg-brand-600" : "bg-gray-200"
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:ring-offset-2 disabled:opacity-50 ${
+              autoDeploy ? "bg-brand-600" : "bg-zinc-700"
             }`}
           >
             <span
@@ -1951,17 +1951,17 @@ function SettingsTab({
       </div>
 
       {/* Build & Development Settings */}
-      <div className="rounded-lg border border-gray-200 p-4">
-        <h3 className="mb-1 text-sm font-semibold text-gray-900">
+      <div className="rounded-lg border border-zinc-800 p-4">
+        <h3 className="mb-1 text-sm font-semibold text-zinc-100">
           Build &amp; Development Settings
         </h3>
-        <p className="mb-4 text-xs text-gray-500">
+        <p className="mb-4 text-xs text-zinc-500">
           Override the default build behavior. Leave blank to use auto-detected
           defaults.
         </p>
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Root Directory
             </label>
             <input
@@ -1969,15 +1969,15 @@ function SettingsTab({
               value={rootDirectory}
               onChange={(e) => setRootDirectory(e.target.value)}
               placeholder="./"
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-zinc-500">
               The directory where your source code is located, relative to the
               repo root. Used as the build context.
             </p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Install Command
             </label>
             <input
@@ -1985,14 +1985,14 @@ function SettingsTab({
               value={installCommand}
               onChange={(e) => setInstallCommand(e.target.value)}
               placeholder={project.framework === "python" ? "pip install -r requirements.txt" : "npm ci"}
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-zinc-500">
               The command used to install dependencies.
             </p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Build Command
             </label>
             <input
@@ -2000,14 +2000,14 @@ function SettingsTab({
               value={buildCommand}
               onChange={(e) => setBuildCommand(e.target.value)}
               placeholder="npm run build"
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-zinc-500">
               The command used to build your project.
             </p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Output Directory
             </label>
             <input
@@ -2015,9 +2015,9 @@ function SettingsTab({
               value={outputDirectory}
               onChange={(e) => setOutputDirectory(e.target.value)}
               placeholder={project.framework === "react" ? "dist" : ""}
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-zinc-500">
               The directory where the build output is located. Used for static
               and React builds.
             </p>
@@ -2026,7 +2026,7 @@ function SettingsTab({
             <button
               onClick={handleSaveBuildSettings}
               disabled={savingBuild || !buildSettingsChanged}
-              className="rounded-md bg-brand-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              className="rounded-md bg-brand-500 px-4 py-1.5 text-xs font-medium text-black hover:bg-brand-400 disabled:opacity-50"
             >
               {savingBuild ? "Saving..." : "Save"}
             </button>
@@ -2039,16 +2039,16 @@ function SettingsTab({
 
       {/* Framework info */}
       {project.framework && (
-        <div className="rounded-lg border border-gray-200 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">
+        <div className="rounded-lg border border-zinc-800 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-zinc-100">
             Detected Framework
           </h3>
-          <p className="text-sm text-gray-700">
-            <span className="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-sm font-medium text-gray-800">
+          <p className="text-sm text-zinc-300">
+            <span className="inline-flex items-center rounded bg-zinc-800 px-2 py-0.5 text-sm font-medium text-zinc-200">
               {project.framework}
             </span>
           </p>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-zinc-500">
             Detected automatically during the first build. Used to generate a
             Dockerfile if one is not present in the repository.
           </p>
@@ -2056,11 +2056,11 @@ function SettingsTab({
       )}
 
       {/* Deploy Controls */}
-      <div className="rounded-lg border border-gray-200 p-4">
-        <h3 className="mb-1 text-sm font-semibold text-gray-900">
+      <div className="rounded-lg border border-zinc-800 p-4">
+        <h3 className="mb-1 text-sm font-semibold text-zinc-100">
           Deploy Controls
         </h3>
-        <p className="mb-4 text-xs text-gray-500">
+        <p className="mb-4 text-xs text-zinc-500">
           Manage deploy locks, health checks, notifications, and project
           lifecycle.
         </p>
@@ -2068,16 +2068,16 @@ function SettingsTab({
         {/* Deploy lock toggle */}
         <div className="mb-5 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-900">Deploy Lock</p>
-            <p className="text-xs text-gray-500">
+            <p className="text-sm font-medium text-zinc-100">Deploy Lock</p>
+            <p className="text-xs text-zinc-500">
               When locked, no new deploys can be triggered for this project.
             </p>
           </div>
           <button
             onClick={handleToggleDeployLock}
             disabled={saving}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 disabled:opacity-50 ${
-              deployLocked ? "bg-red-500" : "bg-gray-200"
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:ring-offset-2 disabled:opacity-50 ${
+              deployLocked ? "bg-red-500" : "bg-zinc-700"
             }`}
           >
             <span
@@ -2090,7 +2090,7 @@ function SettingsTab({
 
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Health Check Path
             </label>
             <input
@@ -2098,14 +2098,14 @@ function SettingsTab({
               value={healthCheckPath}
               onChange={(e) => setHealthCheckPath(e.target.value)}
               placeholder="/healthz"
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-zinc-500">
               Custom HTTP path to check after deploy. Defaults to / if not set.
             </p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Health Check Timeout (seconds)
             </label>
             <input
@@ -2115,14 +2115,14 @@ function SettingsTab({
               placeholder="30"
               min={5}
               max={600}
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-zinc-500">
               Max seconds to wait for the health check to pass (5-600).
             </p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Webhook URL
             </label>
             <input
@@ -2130,24 +2130,24 @@ function SettingsTab({
               value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
               placeholder="https://hooks.slack.com/services/..."
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-zinc-500">
               Receive deploy success/failure notifications via webhook (Slack,
               Discord, etc.).
             </p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">
+            <label className="mb-1 block text-xs font-medium text-zinc-300">
               Project Expiry Date
             </label>
             <input
               type="datetime-local"
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
-              className="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="block w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-zinc-500">
               Automatically lock deploys after this date. Leave blank for no
               expiry.
             </p>
@@ -2156,7 +2156,7 @@ function SettingsTab({
             <button
               onClick={handleSaveDeployControls}
               disabled={savingDeploy || !deployControlsChanged}
-              className="rounded-md bg-brand-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+              className="rounded-md bg-brand-500 px-4 py-1.5 text-xs font-medium text-black hover:bg-brand-400 disabled:opacity-50"
             >
               {savingDeploy ? "Saving..." : "Save"}
             </button>
@@ -2168,16 +2168,16 @@ function SettingsTab({
       </div>
 
       {/* Danger zone */}
-      <div className="rounded-lg border border-red-200 p-4">
-        <h3 className="mb-3 text-sm font-semibold text-red-600">
+      <div className="rounded-lg border border-red-800 p-4">
+        <h3 className="mb-3 text-sm font-semibold text-red-400">
           Danger Zone
         </h3>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-sm font-medium text-zinc-100">
               Delete this project
             </p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-zinc-500">
               Permanently remove this project, its environments, builds, and
               deploys. This action cannot be undone.
             </p>
@@ -2185,7 +2185,7 @@ function SettingsTab({
           <button
             onClick={() => setShowDeleteModal(true)}
             disabled={deleting}
-            className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            className="rounded-md border border-red-800 bg-zinc-900/50 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-950/30 disabled:opacity-50"
           >
             Delete Project
           </button>
@@ -2193,7 +2193,7 @@ function SettingsTab({
       </div>
 
       {message && (
-        <p className="text-xs text-gray-600">{message}</p>
+        <p className="text-xs text-zinc-400">{message}</p>
       )}
 
       {/* Disconnect repo modal */}
@@ -2351,47 +2351,47 @@ function MembersTab({
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-500">Loading members...</p>;
+    return <p className="text-sm text-zinc-500">Loading members...</p>;
   }
 
   if (error && members.length === 0) {
-    return <p className="text-sm text-red-600">{error}</p>;
+    return <p className="text-sm text-red-400">{error}</p>;
   }
 
   return (
     <div className="space-y-6">
       {/* Owner display */}
-      <div className="rounded-lg border border-gray-200 p-4">
-        <h3 className="mb-3 text-sm font-semibold text-gray-900">Owner</h3>
+      <div className="rounded-lg border border-zinc-800 p-4">
+        <h3 className="mb-3 text-sm font-semibold text-zinc-100">Owner</h3>
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-950 text-sm font-semibold text-brand-400">
             {(user?.id === project.owner_id ? user?.display_name : "O")
               ?.charAt(0)
               .toUpperCase()}
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-sm font-medium text-zinc-100">
               {user?.id === project.owner_id
                 ? user?.display_name
                 : "Project Owner"}
             </p>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-zinc-500">
               {user?.id === project.owner_id ? user?.username : ""}
             </p>
           </div>
-          <span className="ml-auto inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+          <span className="ml-auto inline-flex items-center rounded-md bg-zinc-800 px-2 py-0.5 text-xs font-medium text-zinc-400">
             Owner
           </span>
         </div>
       </div>
 
       {/* Contributors list */}
-      <div className="rounded-lg border border-gray-200 p-4">
+      <div className="rounded-lg border border-zinc-800 p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">
+          <h3 className="text-sm font-semibold text-zinc-100">
             Contributors
             {members.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-500">
+              <span className="ml-1.5 rounded-full bg-zinc-800 px-2 py-0.5 text-xs font-normal text-zinc-500">
                 {members.length}
               </span>
             )}
@@ -2403,7 +2403,7 @@ function MembersTab({
           <div ref={searchRef} className="relative mb-4">
             <div className="relative">
               <svg
-                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500"
                 fill="none"
                 viewBox="0 0 24 24"
                 strokeWidth={2}
@@ -2423,21 +2423,21 @@ function MembersTab({
                   if (searchResults.length > 0) setShowResults(true);
                 }}
                 placeholder="Search users to add..."
-                className="block w-full rounded-md border border-gray-300 py-1.5 pl-9 pr-3 text-sm text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="block w-full rounded-md border border-zinc-800 bg-zinc-950 py-1.5 pl-9 pr-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
                 disabled={adding}
               />
               {searching && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-brand-600" />
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-600 border-t-brand-600" />
                 </div>
               )}
             </div>
 
             {/* Search results dropdown */}
             {showResults && (
-              <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+              <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-zinc-800 bg-zinc-900 shadow-lg">
                 {searchResults.length === 0 ? (
-                  <p className="px-3 py-2 text-sm text-gray-500">
+                  <p className="px-3 py-2 text-sm text-zinc-500">
                     {searchQuery.trim()
                       ? "No users found"
                       : "Type to search..."}
@@ -2448,16 +2448,16 @@ function MembersTab({
                       key={u.id}
                       onClick={() => handleAddMember(u.id)}
                       disabled={adding}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-50"
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-zinc-800/50 disabled:opacity-50"
                     >
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-800 text-xs font-semibold text-zinc-400">
                         {u.display_name.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-gray-900">
+                        <p className="truncate font-medium text-zinc-100">
                           {u.display_name}
                         </p>
-                        <p className="truncate text-xs text-gray-500">
+                        <p className="truncate text-xs text-zinc-500">
                           {u.username}
                         </p>
                       </div>
@@ -2471,19 +2471,19 @@ function MembersTab({
             )}
 
             {addError && (
-              <p className="mt-1 text-xs text-red-600">{addError}</p>
+              <p className="mt-1 text-xs text-red-400">{addError}</p>
             )}
           </div>
         )}
 
         {/* Member list */}
         {members.length === 0 ? (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-zinc-500">
             No contributors yet.
             {canManageMembers && " Search for users above to add them."}
           </p>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-zinc-800">
             {members.map((member) => {
               const isSelf = member.user_id === user?.id;
               const canRemove = canManageMembers || isSelf;
@@ -2492,27 +2492,27 @@ function MembersTab({
                   key={member.id}
                   className="flex items-center gap-3 py-2.5"
                 >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-600">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-sm font-semibold text-zinc-400">
                     {member.display_name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-zinc-100">
                       {member.display_name}
                       {isSelf && (
-                        <span className="ml-1 text-xs font-normal text-gray-400">
+                        <span className="ml-1 text-xs font-normal text-zinc-500">
                           (you)
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-gray-500">{member.username}</p>
+                    <p className="text-xs text-zinc-500">{member.username}</p>
                   </div>
-                  <span className="inline-flex items-center rounded-md bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-inset ring-brand-200">
+                  <span className="inline-flex items-center rounded-md bg-brand-950/50 px-2 py-0.5 text-xs font-medium text-brand-400 ring-1 ring-inset ring-brand-800">
                     {member.role}
                   </span>
                   {canRemove && (
                     <button
                       onClick={() => setRemoveTarget(member)}
-                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 transition-colors"
+                      className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-400 transition-colors"
                       title={isSelf ? "Leave project" : "Remove member"}
                     >
                       <svg
@@ -2569,7 +2569,7 @@ function MembersTab({
 function SecretsTabLink({ projectId }: { projectId: string }) {
   return (
     <div className="py-8 text-center">
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-zinc-500">
         Manage secrets for this project.
       </p>
       <Link

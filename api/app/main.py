@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.config import settings
 from app.database import engine
@@ -31,6 +32,7 @@ from app.routers import (
     projects,
     quotas,
     secrets,
+    templates,
     users,
 )
 
@@ -116,6 +118,9 @@ app.add_middleware(
 # Rate limiting middleware (must be added after CORS so CORS headers are present on 429s)
 app.add_middleware(RateLimitMiddleware)
 
+# Prometheus metrics — exposes GET /metrics
+Instrumentator().instrument(app).expose(app)
+
 
 # --- Global exception handler ---
 # Catches unhandled exceptions so clients get a clean JSON 500 instead
@@ -149,6 +154,9 @@ app.include_router(networks.router)
 # Integrations
 app.include_router(github.router)
 app.include_router(github.repo_router)
+
+# Templates
+app.include_router(templates.router)
 
 # Admin
 app.include_router(admin.router)

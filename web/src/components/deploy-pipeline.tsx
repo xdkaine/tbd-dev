@@ -75,13 +75,13 @@ export function DeployPipeline({ status }: { status: DeployStatus }) {
                   className={clsx(
                     "flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold",
                     state === "completed" &&
-                      "border-green-500 bg-green-50 text-green-700",
+                      "border-green-500 bg-green-950/30 text-green-400",
                     state === "current" &&
-                      "border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-200",
+                      "border-brand-500 bg-brand-950/50 text-brand-400 ring-2 ring-brand-800",
                     state === "pending" &&
-                      "border-gray-200 bg-gray-50 text-gray-400",
+                      "border-zinc-700 bg-zinc-800/50 text-zinc-500",
                     state === "failed" &&
-                      "border-red-500 bg-red-50 text-red-700",
+                      "border-red-500 bg-red-950/30 text-red-400",
                   )}
                 >
                   {state === "completed" ? (
@@ -93,10 +93,10 @@ export function DeployPipeline({ status }: { status: DeployStatus }) {
                 <span
                   className={clsx(
                     "mt-1 text-[10px] font-medium leading-tight",
-                    state === "completed" && "text-green-700",
-                    state === "current" && "text-brand-700",
-                    state === "pending" && "text-gray-400",
-                    state === "failed" && "text-red-700",
+                    state === "completed" && "text-green-400",
+                    state === "current" && "text-brand-400",
+                    state === "pending" && "text-zinc-500",
+                    state === "failed" && "text-red-400",
                   )}
                 >
                   {STEP_LABELS[step]}
@@ -110,7 +110,7 @@ export function DeployPipeline({ status }: { status: DeployStatus }) {
                     "mx-1 h-0.5 w-6",
                     getStepState(PIPELINE_STEPS[i + 1], status) !== "pending"
                       ? "bg-green-400"
-                      : "bg-gray-200",
+                      : "border-zinc-700 bg-zinc-700",
                   )}
                 />
               )}
@@ -125,10 +125,10 @@ export function DeployPipeline({ status }: { status: DeployStatus }) {
           <span
             className={clsx(
               "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold",
-              status === "failed" && "bg-red-100 text-red-700",
-              status === "rolled_back" && "bg-orange-100 text-orange-700",
-              status === "superseded" && "bg-gray-100 text-gray-500",
-              status === "stopped" && "bg-amber-100 text-amber-800",
+              status === "failed" && "bg-red-950/30 text-red-400",
+              status === "rolled_back" && "bg-orange-950/30 text-orange-400",
+              status === "superseded" && "bg-zinc-800 text-zinc-500",
+              status === "stopped" && "bg-amber-950/30 text-amber-400",
             )}
           >
             {STEP_LABELS[status]}

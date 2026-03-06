@@ -28,7 +28,7 @@ export default function AdminDashboardPage() {
 
   if (user && user.role === "JAS_Developer") {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-red-400">
         You do not have permission to view this page.
       </p>
     );
@@ -39,15 +39,15 @@ export default function AdminDashboardPage() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Admin Console</h1>
-        <p className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-zinc-100">Admin Console</h1>
+        <p className="text-sm text-zinc-500">
           Platform overview and management &mdash;{" "}
-          <span className="font-medium text-brand-700">{user?.role}</span>
+          <span className="font-medium text-brand-400">{user?.role}</span>
         </p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-500">Loading platform stats...</p>
+        <p className="text-sm text-zinc-500">Loading platform stats...</p>
       ) : stats ? (
         <>
           {/* Stats grid */}
@@ -77,7 +77,7 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Infrastructure row */}
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Infrastructure
           </h2>
           <div className="mb-8 grid gap-4 sm:grid-cols-3">
@@ -104,7 +104,7 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Quick links */}
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Quick Actions
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -142,7 +142,7 @@ export default function AdminDashboardPage() {
           </div>
         </>
       ) : (
-        <p className="text-sm text-gray-500">Unable to load stats.</p>
+        <p className="text-sm text-zinc-500">Unable to load stats.</p>
       )}
     </div>
   );
@@ -167,16 +167,16 @@ function StatCard({
     indigo: "border-l-indigo-500",
     amber: "border-l-amber-500",
     rose: "border-l-rose-500",
-    gray: "border-l-gray-300",
+    gray: "border-l-zinc-600",
   };
 
   const inner = (
     <div
-      className={`rounded-lg border border-gray-200 border-l-4 ${colorMap[color]} p-4 transition-shadow hover:shadow-sm`}
+      className={`rounded-lg border border-zinc-800 border-l-4 ${colorMap[color]} bg-zinc-900/50 p-4 transition-shadow`}
     >
-      <p className="text-xs font-medium text-gray-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
+      <p className="text-xs font-medium text-zinc-500">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-zinc-100">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-zinc-500">{sub}</p>}
     </div>
   );
 
@@ -201,11 +201,11 @@ function QuickLink({
 }) {
   if (!available) {
     return (
-      <div className="relative rounded-lg border border-gray-200 bg-gray-50 p-4 opacity-60">
-        <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
-        <p className="mt-1 text-xs text-gray-500">{description}</p>
+      <div className="relative rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 opacity-60">
+        <h3 className="text-sm font-semibold text-zinc-300">{title}</h3>
+        <p className="mt-1 text-xs text-zinc-500">{description}</p>
         {badge && (
-          <span className="absolute right-3 top-3 rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-500">
+          <span className="absolute right-3 top-3 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-500">
             {badge}
           </span>
         )}
@@ -216,12 +216,12 @@ function QuickLink({
   return (
     <Link
       href={href}
-      className="group rounded-lg border border-gray-200 p-4 transition-all hover:border-brand-300 hover:shadow-sm"
+      className="group rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 transition-all hover:border-brand-500/30"
     >
-      <h3 className="text-sm font-semibold text-gray-900 group-hover:text-brand-700">
+      <h3 className="text-sm font-semibold text-zinc-100 group-hover:text-brand-400">
         {title}
       </h3>
-      <p className="mt-1 text-xs text-gray-500">{description}</p>
+      <p className="mt-1 text-xs text-zinc-500">{description}</p>
     </Link>
   );
 }

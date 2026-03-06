@@ -46,9 +46,15 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     # Resolve platform role from AD groups
     role = resolve_role(ad_user.groups)
 
-    # Find or create user in local DB
+    # Find or create user in local DB (check username first, then email)
     result = await db.execute(select(User).where(User.username == ad_user.username))
     user = result.scalar_one_or_none()
+
+    if user is None:
+        # Username not found — check if a user with this email already exists
+        # (handles AD account renames where username changes but email stays the same)
+        result = await db.execute(select(User).where(User.email == ad_user.email))
+        user = result.scalar_one_or_none()
 
     if user is None:
         user = User(
@@ -62,6 +68,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         logger.info("Created new user: %s (role=%s)", user.username, role.value)
     else:
         # Update user info from AD on each login
+        user.username = ad_user.username
         user.display_name = ad_user.display_name
         user.email = ad_user.email
         user.ad_dn = ad_user.dn
@@ -163,10 +170,11 @@ async def github_oauth_start(
 
     params = {
         "client_id": settings.github_client_id,
+        "scope": "repo",
         "state": state,
-        "scope": "read:user,repo",
     }
     authorize_url = f"{GITHUB_AUTHORIZE_URL}?{urlencode(params)}"
+    logger.info("GitHub OAuth authorize URL: %s", authorize_url)
 
     return {"authorize_url": authorize_url}
 
@@ -208,6 +216,10 @@ async def github_oauth_callback(
         )
 
     token_data = token_resp.json()
+    # Log full response (minus the actual token) for debugging
+    debug_data = {k: v for k, v in token_data.items() if k != "access_token"}
+    logger.info("GitHub OAuth token response (redacted): %s", debug_data)
+    granted_scope = token_data.get("scope", "")
     access_token = token_data.get("access_token")
     if not access_token:
         logger.error("No access_token in GitHub response: %s", token_data)
