@@ -166,17 +166,45 @@ async def teardown_deploy(
     adapter = get_proxmox_adapter()
 
     # Step 1: Find and destroy LXC container
+    #
+    # IMPORTANT: Use the deploy's stored container_vmid / container_node
+    # when available.  The hostname-based scan (`_find_lxc_for_deploy`)
+    # matches by LXC *name* which is shared across all deploys for the
+    # same project/environment.  If a newer deploy's container is already
+    # running with that name, the scan would return the NEW container and
+    # destroy it instead of the old one.
     if destroy_container:
-        lxc = await _find_lxc_for_deploy(adapter, hostname)
-        if lxc:
-            node, vmid = lxc
+        if deploy.container_vmid and deploy.container_node:
+            # Precise teardown using the exact VMID persisted at creation time
+            node = deploy.container_node
+            vmid = deploy.container_vmid
+            logger.info(
+                "Teardown: targeting stored LXC %d on %s for deploy %s",
+                vmid, node, deploy_id_str[:8],
+            )
             destroyed = await destroy_lxc_container(adapter, node, vmid)
             if destroyed:
                 logger.info("Teardown: destroyed LXC %d for deploy %s", vmid, deploy_id_str[:8])
             else:
                 logger.warning("Teardown: failed to destroy LXC %d for deploy %s", vmid, deploy_id_str[:8])
         else:
-            logger.info("Teardown: no LXC found matching hostname '%s'", hostname)
+            # Fallback for legacy deploys that predate container_vmid tracking.
+            # Uses hostname scan — acceptable here because these old deploys
+            # won't race with the new VMID-tracked deploys.
+            logger.warning(
+                "Teardown: deploy %s has no stored VMID, falling back to hostname scan '%s'",
+                deploy_id_str[:8], hostname,
+            )
+            lxc = await _find_lxc_for_deploy(adapter, hostname)
+            if lxc:
+                node, vmid = lxc
+                destroyed = await destroy_lxc_container(adapter, node, vmid)
+                if destroyed:
+                    logger.info("Teardown: destroyed LXC %d for deploy %s", vmid, deploy_id_str[:8])
+                else:
+                    logger.warning("Teardown: failed to destroy LXC %d for deploy %s", vmid, deploy_id_str[:8])
+            else:
+                logger.info("Teardown: no LXC found matching hostname '%s'", hostname)
 
     # Step 2: Remove per-deploy Nginx config
     nginx_removed = False
