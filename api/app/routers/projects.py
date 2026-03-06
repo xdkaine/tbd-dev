@@ -26,23 +26,11 @@ from app.services.network_allocator import (
     deallocate_vlan,
 )
 from app.services.rbac import Role, check_permission
+from app.utils.project_access import is_project_contributor
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/projects", tags=["projects"])
-
-
-async def _is_project_contributor(
-    db: AsyncSession, project_id: uuid.UUID, user_id: uuid.UUID
-) -> bool:
-    """Check if a user is a contributor on a project."""
-    result = await db.execute(
-        select(ProjectMember.id).where(
-            ProjectMember.project_id == project_id,
-            ProjectMember.user_id == user_id,
-        )
-    )
-    return result.scalar_one_or_none() is not None
 
 
 @router.get("", response_model=ProjectListResponse)
@@ -171,7 +159,7 @@ async def get_project(
 
     # Developers can see their own projects or projects they contribute to
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        if not await _is_project_contributor(db, project_id, current_user.id):
+        if not await is_project_contributor(db, project_id, current_user.id):
             raise HTTPException(status_code=404, detail="Project not found")
 
     return ProjectResponse.model_validate(project)
@@ -195,7 +183,7 @@ async def update_project(
     if current_user.role == Role.DEVELOPER:
         check_permission(current_user.role, "projects.update")
         if project.owner_id != current_user.id:
-            if not await _is_project_contributor(db, project_id, current_user.id):
+            if not await is_project_contributor(db, project_id, current_user.id):
                 raise HTTPException(status_code=403, detail="Cannot update another user's project")
     else:
         check_permission(current_user.role, "projects.update")

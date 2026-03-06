@@ -336,6 +336,8 @@ async def deploy_template(
         repo_full_name=repo_full_name,
         default_branch=default_branch,
         install_id=None,
+        created_from_template=True,
+        template_slug=template.slug,
     )
     db.add(repo_record)
     await db.flush()
@@ -410,3 +412,4 @@ async def deploy_template(
         message=f"Project created from template '{template.name}'. "
         + ("Build triggered." if initial_build_id else "Push to trigger first build."),
     )
+

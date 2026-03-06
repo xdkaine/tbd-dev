@@ -15,6 +15,7 @@ from app.models.secret import Secret
 from app.schemas.secret import SecretCreate, SecretListResponse, SecretResponse
 from app.services.audit import write_audit_log
 from app.services.rbac import Role, check_permission
+from app.utils.project_access import is_project_contributor
 
 router = APIRouter(prefix="/projects/{project_id}/secrets", tags=["secrets"])
 
@@ -43,7 +44,8 @@ async def list_secrets(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
+        if not await is_project_contributor(db, project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Project not found")
 
     query = select(Secret).where(Secret.project_id == project_id)
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))

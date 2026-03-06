@@ -106,6 +106,17 @@ class Repo(Base, UUIDPrimaryKeyMixin):
     repo_full_name: Mapped[str | None] = mapped_column(String(512), nullable=True)  # owner/repo
     default_branch: Mapped[str] = mapped_column(String(255), nullable=False, default="main")
     install_id: Mapped[str | None] = mapped_column(String(255), nullable=True)  # GitHub App install ID
+    created_from_template: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="True if this repo was created via a TBD template",
+    )
+    template_slug: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Template slug used to create this repo (if any)",
+    )
 
     # Relationships
     project: Mapped["Project"] = relationship(back_populates="repo")

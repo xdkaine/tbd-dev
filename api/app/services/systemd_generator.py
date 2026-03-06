@@ -65,25 +65,69 @@ def _generate_init_script(params: SystemdUnitParams) -> str:
 
     env_block = "\n".join(env_exports) if env_exports else "# (no OCI env vars)"
 
-    # Build the network config block
+    # Build the network config block.
+    # We must handle images that lack iproute2 (e.g. python:3.12-slim,
+    # node:20-alpine without iproute2).  Strategy: try `ip` first, then
+    # fall back to `ifconfig`, then raw sysfs writes as a last resort.
+    ip_addr_cidr = params.ip_address  # e.g. "172.16.4.10/25"
+    # Extract bare IP and prefix length for ifconfig fallback
+    if ip_addr_cidr and "/" in ip_addr_cidr:
+        bare_ip = ip_addr_cidr.split("/")[0]
+        prefix_len = ip_addr_cidr.split("/")[1]
+    else:
+        bare_ip = ip_addr_cidr or ""
+        prefix_len = ""
+
     if params.ip_address:
         net_block = dedent(f"""\
         # Bring up loopback
-        ip link set lo up 2>/dev/null || true
+        if command -v ip >/dev/null 2>&1; then
+            ip link set lo up 2>/dev/null || true
+        elif command -v ifconfig >/dev/null 2>&1; then
+            ifconfig lo up 2>/dev/null || true
+        else
+            # Raw sysfs fallback — bring up loopback
+            echo 1 > /sys/class/net/lo/flags 2>/dev/null || true
+        fi
 
         # Bring up eth0 and assign static IP
         # ostype=unmanaged means Proxmox does NOT configure networking for us
-        ip link set eth0 up 2>/dev/null || true
-        ip addr add {params.ip_address} dev eth0 2>/dev/null || true
+        if command -v ip >/dev/null 2>&1; then
+            ip link set eth0 up 2>/dev/null || true
+            ip addr add {ip_addr_cidr} dev eth0 2>/dev/null || true
+        elif command -v ifconfig >/dev/null 2>&1; then
+            ifconfig eth0 {bare_ip}/{prefix_len} up 2>/dev/null || true
+        else
+            # Raw sysfs fallback — bring up eth0
+            echo 1 > /sys/class/net/eth0/flags 2>/dev/null || true
+        fi
         """)
         if params.gateway:
-            net_block += f"ip route add default via {params.gateway} 2>/dev/null || true\n"
+            net_block += dedent(f"""\
+            if command -v ip >/dev/null 2>&1; then
+                ip route add default via {params.gateway} 2>/dev/null || true
+            elif command -v route >/dev/null 2>&1; then
+                route add default gw {params.gateway} 2>/dev/null || true
+            fi
+            """)
     else:
         net_block = dedent("""\
         # Bring up loopback
-        ip link set lo up 2>/dev/null || true
+        if command -v ip >/dev/null 2>&1; then
+            ip link set lo up 2>/dev/null || true
+        elif command -v ifconfig >/dev/null 2>&1; then
+            ifconfig lo up 2>/dev/null || true
+        else
+            echo 1 > /sys/class/net/lo/flags 2>/dev/null || true
+        fi
         # Bring up eth0 — no static IP available, relying on LXC config
-        ip link set eth0 up 2>/dev/null || true
+        if command -v ip >/dev/null 2>&1; then
+            ip link set eth0 up 2>/dev/null || true
+        elif command -v ifconfig >/dev/null 2>&1; then
+            ifconfig eth0 up 2>/dev/null || true
+        else
+            echo 1 > /sys/class/net/eth0/flags 2>/dev/null || true
+        fi
         """)
 
     script = dedent(f"""\

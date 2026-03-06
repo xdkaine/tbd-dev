@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import { slugify, timeAgo } from "@/lib/utils";
-import type { GitHubRepo, Project } from "@/lib/types";
+import { getDeployActivity, slugify, timeAgo } from "@/lib/utils";
+import type { Deploy, DeployStatus, GitHubRepo, Project, UserInfo } from "@/lib/types";
 import { useAuth } from "@/contexts/auth";
 import { TemplateGallery } from "@/components/template-gallery";
 
@@ -16,13 +16,40 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [deploysLoading, setDeploysLoading] = useState(false);
+  const [deploysMap, setDeploysMap] = useState<Record<string, Deploy[]>>({});
   const [addMode, setAddMode] = useState<AddMode>(null);
 
   const fetchProjects = useCallback(async () => {
     try {
       const res = await api.projects.list();
-      setProjects(res.items);
+      const items = res.items;
+      setProjects(items);
       setTotal(res.total);
+      setDeploysLoading(true);
+      Promise.allSettled(
+        items.map((project) => api.deploys.list(project.id, 0, 20)),
+      )
+        .then((results) => {
+          const nextDeploys: Record<string, Deploy[]> = {};
+          results.forEach((result, index) => {
+            const projectId = items[index]?.id;
+            if (!projectId) return;
+            if (result.status === "fulfilled") {
+              nextDeploys[projectId] = [...result.value.items].sort(
+                (a, b) =>
+                  new Date(b.created_at).getTime() -
+                  new Date(a.created_at).getTime(),
+              );
+            } else {
+              nextDeploys[projectId] = [];
+            }
+          });
+          setDeploysMap(nextDeploys);
+        })
+        .finally(() => {
+          setDeploysLoading(false);
+        });
     } catch {
       /* handled by API layer */
     } finally {
@@ -175,53 +202,174 @@ export default function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
-            <Link
+            <ProjectCard
               key={project.id}
-              href={`/dashboard/${project.id}`}
-              className="group rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all hover:border-brand-500/30 hover:bg-zinc-900"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  <h3 className="font-semibold text-zinc-100 truncate">{project.name}</h3>
-                  {user && project.owner_id !== user.id && (
-                    <span className="inline-flex flex-shrink-0 items-center rounded-md bg-brand-950 px-1.5 py-0.5 text-xs font-medium text-brand-400 ring-1 ring-inset ring-brand-800">
-                      Contributor
-                    </span>
-                  )}
-                </div>
-                {project.repo?.repo_full_name && (
-                  <span className="ml-2 flex-shrink-0">
-                    <svg className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400 transition-colors" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
-                    </svg>
-                  </span>
-                )}
-              </div>
-              {project.repo?.repo_full_name ? (
-                <p className="mt-1 truncate text-xs text-zinc-500">
-                  {project.repo.repo_full_name}
-                </p>
-              ) : project.repo_url ? (
-                <p className="mt-1 truncate text-xs text-zinc-500">
-                  {project.repo_url}
-                </p>
-              ) : null}
-              <div className="mt-2 flex items-center gap-2">
-                {project.framework && (
-                  <span className="inline-flex items-center rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">
-                    {project.framework}
-                  </span>
-                )}
-                <span className="text-xs text-zinc-600">
-                  {timeAgo(project.created_at)}
-                </span>
-              </div>
-            </Link>
+              project={project}
+              deploys={deploysMap[project.id] ?? []}
+              deploysLoading={deploysLoading}
+              user={user}
+            />
           ))}
         </div>
       )}
     </div>
   );
+}
+
+function ProjectCard({
+  project,
+  deploys,
+  deploysLoading,
+  user,
+}: {
+  project: Project;
+  deploys: Deploy[];
+  deploysLoading: boolean;
+  user: UserInfo | null;
+}) {
+  const latestDeploy = deploys[0];
+  const activity = useMemo(() => getDeployActivity(deploys, 7), [deploys]);
+  const maxActivity = Math.max(...activity.map((item) => item.count), 1);
+  const statusTone = getStatusTone(latestDeploy?.status);
+
+  return (
+    <Link
+      href={`/dashboard/${project.id}`}
+      className="group relative overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 transition-all hover:border-brand-500/30 hover:bg-zinc-900"
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <h3 className="font-semibold text-zinc-100 truncate">{project.name}</h3>
+          {user && project.owner_id !== user.id && (
+            <span className="inline-flex flex-shrink-0 items-center rounded-md bg-brand-950 px-1.5 py-0.5 text-xs font-medium text-brand-400 ring-1 ring-inset ring-brand-800">
+              Contributor
+            </span>
+          )}
+        </div>
+        {project.repo?.repo_full_name && (
+          <span className="ml-2 flex-shrink-0">
+            <svg className="h-4 w-4 text-zinc-600 group-hover:text-zinc-400 transition-colors" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+            </svg>
+          </span>
+        )}
+      </div>
+      {project.repo?.repo_full_name ? (
+        <p className="mt-1 truncate text-xs text-zinc-500">
+          {project.repo.repo_full_name}
+        </p>
+      ) : project.repo_url ? (
+        <p className="mt-1 truncate text-xs text-zinc-500">{project.repo_url}</p>
+      ) : null}
+      <div className="mt-2 flex items-center gap-2">
+        {project.framework && (
+          <span className="inline-flex items-center rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">
+            {project.framework}
+          </span>
+        )}
+        <span className="text-xs text-zinc-600">
+          Created {timeAgo(project.created_at)}
+        </span>
+      </div>
+      <div className="mt-4 rounded-lg border border-zinc-800/70 bg-zinc-950/40 p-3">
+        {deploysLoading ? (
+          <div className="space-y-2">
+            <div className="h-3 w-40 animate-pulse rounded bg-zinc-800/70" />
+            <div className="h-8 w-full animate-pulse rounded bg-zinc-800/50" />
+          </div>
+        ) : deploys.length === 0 ? (
+          <div className="flex items-center justify-between text-xs text-zinc-500">
+            <span>No deploys yet</span>
+            <span className="rounded-full border border-zinc-800 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+              New
+            </span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-zinc-400">
+                <span
+                  className={
+                    "h-2 w-2 rounded-full " +
+                    statusTone.dot +
+                    (statusTone.pulse ? " animate-pulse" : "")
+                  }
+                />
+                <span className="text-zinc-200">{statusTone.label}</span>
+                <span className="text-zinc-600">-</span>
+                <span>deployed {timeAgo(latestDeploy.created_at)}</span>
+              </div>
+              <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-600">
+                7d
+              </span>
+            </div>
+            <div className="flex items-end gap-1" style={{ height: "32px" }}>
+              {activity.map((item) => (
+                <div
+                  key={item.date}
+                  className="flex-1 rounded-sm bg-zinc-800/70"
+                  style={{
+                    height:
+                      item.count > 0
+                        ? `${Math.max((item.count / maxActivity) * 100, 20)}%`
+                        : "2px",
+                    backgroundColor:
+                      item.count > 0 ? "rgba(0, 214, 143, 0.55)" : undefined,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function getStatusTone(status?: DeployStatus) {
+  switch (status) {
+    case "active":
+    case "healthy":
+      return {
+        dot: "bg-brand-500 shadow-[0_0_10px_rgba(0,214,143,0.6)]",
+        label: "Healthy",
+        pulse: true,
+      };
+    case "queued":
+    case "building":
+    case "provisioning":
+      return {
+        dot: "bg-amber-400/80 shadow-[0_0_10px_rgba(251,191,36,0.5)]",
+        label: "Deploying",
+        pulse: true,
+      };
+    case "failed":
+      return {
+        dot: "bg-red-500/80 shadow-[0_0_10px_rgba(239,68,68,0.5)]",
+        label: "Failed",
+        pulse: false,
+      };
+    case "stopped":
+    case "rolled_back":
+    case "superseded":
+      return {
+        dot: "bg-zinc-500/70",
+        label: "Inactive",
+        pulse: false,
+      };
+    case "artifact_ready":
+      return {
+        dot: "bg-blue-400/80 shadow-[0_0_10px_rgba(96,165,250,0.5)]",
+        label: "Ready",
+        pulse: false,
+      };
+    default:
+      return {
+        dot: "bg-zinc-500/70",
+        label: "Inactive",
+        pulse: false,
+      };
+  }
 }
 
 /* ---------------------------------------------------------------------- */

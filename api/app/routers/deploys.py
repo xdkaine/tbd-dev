@@ -43,6 +43,7 @@ from app.services.audit import write_audit_log
 from app.services.build_coordinator import transition_deploy, trigger_deploy
 from app.services.deploy_queue import enqueue_deploy, get_queue_status
 from app.services.rbac import Role, check_permission, has_permission
+from app.utils.project_access import is_project_contributor
 from app.utils.dns import deploy_url
 
 router = APIRouter(tags=["deploys"])
@@ -96,15 +97,17 @@ async def _get_project_for_deploy(
     return environment.project
 
 
-def _check_ownership(
+async def _check_ownership(
+    db: AsyncSession,
     current_user: CurrentUser,
     project: Project,
     permission: str,
 ) -> None:
-    """Check if the user has the permission OR the .own variant + ownership.
+    """Check if the user has the permission OR the .own variant + ownership/contributor.
 
     For Staff/Faculty with the full permission, this is a no-op.
-    For Developers with only the .own variant, verifies they own the project.
+    For Developers with only the .own variant, verifies they own the project
+    or are a contributor on it.
     """
     # If they have the full (non-.own) permission, allow
     if has_permission(current_user.role, permission):
@@ -114,6 +117,9 @@ def _check_ownership(
     own_perm = f"{permission}.own"
     if has_permission(current_user.role, own_perm):
         if project.owner_id == current_user.id:
+            return
+        # Also allow contributors
+        if await is_project_contributor(db, project.id, current_user.id):
             return
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -230,7 +236,8 @@ async def list_deploys(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
+        if not await is_project_contributor(db, project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Project not found")
 
     # Get all environment IDs for this project
     env_result = await db.execute(
@@ -404,7 +411,7 @@ async def rollback_deploy(
 
     # Ownership check for .own permissions
     project = await _get_project_for_deploy(db, deploy)
-    _check_ownership(current_user, project, "deploys.rollback")
+    await _check_ownership(db, current_user, project, "deploys.rollback")
 
     # Must be in a state that can transition to rolled_back
     if not deploy.can_transition_to("rolled_back"):
@@ -553,7 +560,7 @@ async def destroy_deploy(
 
     # Ownership check
     project = await _get_project_for_deploy(db, deploy)
-    _check_ownership(current_user, project, "deploys.destroy")
+    await _check_ownership(db, current_user, project, "deploys.destroy")
 
     # Already terminal?
     if deploy.status in ("rolled_back", "superseded"):
@@ -626,7 +633,7 @@ async def stop_deploy(
         raise HTTPException(status_code=404, detail="Deploy not found")
 
     project = await _get_project_for_deploy(db, deploy)
-    _check_ownership(current_user, project, "deploys.container")
+    await _check_ownership(db, current_user, project, "deploys.container")
 
     if deploy.status != "active":
         raise HTTPException(
@@ -694,7 +701,7 @@ async def start_deploy(
         raise HTTPException(status_code=404, detail="Deploy not found")
 
     project = await _get_project_for_deploy(db, deploy)
-    _check_ownership(current_user, project, "deploys.container")
+    await _check_ownership(db, current_user, project, "deploys.container")
 
     if deploy.status != "stopped":
         raise HTTPException(
@@ -848,7 +855,8 @@ async def get_deploy_logs(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
+        if not await is_project_contributor(db, project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Project not found")
 
     # Find deploy (must belong to an environment of this project)
     env_result = await db.execute(
@@ -894,7 +902,8 @@ async def stream_deploy_logs(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
+        if not await is_project_contributor(db, project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Project not found")
 
     # Verify deploy belongs to project
     env_result = await db.execute(

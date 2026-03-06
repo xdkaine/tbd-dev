@@ -31,6 +31,7 @@ from app.services.github import (
     verify_webhook_signature,
 )
 from app.services.rbac import check_permission
+from app.utils.project_access import is_project_contributor
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +225,8 @@ async def connect_repo(
 
     from app.services.rbac import Role
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Cannot modify another user's project")
+        if not await is_project_contributor(db, project_id, current_user.id):
+            raise HTTPException(status_code=403, detail="Cannot modify another user's project")
 
     # Create or update
     repo_result = await db.execute(select(Repo).where(Repo.project_id == project_id))
@@ -352,7 +354,8 @@ async def disconnect_repo(
 
     from app.services.rbac import Role
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Cannot modify another user's project")
+        if not await is_project_contributor(db, project_id, current_user.id):
+            raise HTTPException(status_code=403, detail="Cannot modify another user's project")
 
     repo_result = await db.execute(select(Repo).where(Repo.project_id == project_id))
     repo = repo_result.scalar_one_or_none()

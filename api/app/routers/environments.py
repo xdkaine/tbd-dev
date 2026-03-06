@@ -17,6 +17,7 @@ from app.schemas.environment import (
 )
 from app.services.audit import write_audit_log
 from app.services.rbac import Role, check_permission
+from app.utils.project_access import is_project_contributor
 
 router = APIRouter(prefix="/projects/{project_id}/environments", tags=["environments"])
 
@@ -30,7 +31,8 @@ async def _get_project_or_404(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
+        if not await is_project_contributor(db, project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Project not found")
     return project
 
 

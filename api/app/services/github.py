@@ -698,3 +698,30 @@ async def get_branch_head_sha(
             branch,
         )
         return None
+
+
+async def delete_github_repo(token: str, repo_full_name: str) -> bool:
+    """Delete a GitHub repo using a user's OAuth token.
+
+    Returns True if deletion succeeded (204/202), False if forbidden/not found.
+    Raises on unexpected errors.
+    """
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.delete(
+            f"{GITHUB_API_BASE}/repos/{repo_full_name}",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+
+    if resp.status_code in (202, 204):
+        logger.info("Deleted repo %s", repo_full_name)
+        return True
+    if resp.status_code in (403, 404):
+        logger.warning("Failed to delete repo %s: %s", repo_full_name, resp.text)
+        return False
+
+    resp.raise_for_status()
+    return False

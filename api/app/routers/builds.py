@@ -29,6 +29,7 @@ from app.services.build_coordinator import create_build_for_push, intake_artifac
 from app.services.deploy_executor import DeployContext, execute_deploy
 from app.services.github import get_branch_head_sha, get_owner_github_token
 from app.services.rbac import Role, check_permission
+from app.utils.project_access import is_project_contributor
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +108,8 @@ async def list_builds(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
+        if not await is_project_contributor(db, project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Project not found")
 
     query = select(Build).where(Build.project_id == project_id)
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
@@ -329,7 +331,8 @@ async def trigger_rebuild(
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
     if current_user.role == Role.DEVELOPER and project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Project not found")
+        if not await is_project_contributor(db, project_id, current_user.id):
+            raise HTTPException(status_code=404, detail="Project not found")
 
     # Get linked repo
     repo_result = await db.execute(

@@ -33,6 +33,8 @@ export default function ProjectDetailPage() {
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [builds, setBuilds] = useState<Build[]>([]);
   const [deploys, setDeploys] = useState<Deploy[]>([]);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPollingStatusRef = useRef<string>("idle");
   const [tab, setTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -63,6 +65,37 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
+
+  useEffect(() => {
+    const hasActiveBuild = builds.some((b) => b.status === "building" || b.status === "queued");
+    const hasActiveDeploy = deploys.some((d) =>
+      ["queued", "building", "artifact_ready", "provisioning", "healthy"].includes(d.status),
+    );
+    const shouldPoll = hasActiveBuild || hasActiveDeploy;
+    const nextStatus = shouldPoll ? "polling" : "idle";
+
+    if (nextStatus === lastPollingStatusRef.current) return;
+
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    if (shouldPoll) {
+      pollingRef.current = setInterval(() => {
+        fetchAll();
+      }, 5000);
+    }
+
+    lastPollingStatusRef.current = nextStatus;
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [builds, deploys, fetchAll]);
 
   if (loading) {
     return <p className="text-sm text-zinc-500">Loading...</p>;
@@ -1312,16 +1345,7 @@ function BuildsTab({
 
   const displayDeployLogs = deployLogStream.logs ?? deployLogs?.logs ?? null;
 
-  // Poll the builds list every 5s while any build is active
-  useEffect(() => {
-    if (!hasActiveBuild) return;
-
-    const interval = setInterval(() => {
-      onUpdate();
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [hasActiveBuild, onUpdate]);
+  // Project-level polling handles build/deploy updates.
 
   // Auto-scroll logs to bottom when they update
   useEffect(() => {
