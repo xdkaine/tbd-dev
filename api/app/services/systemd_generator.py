@@ -27,6 +27,18 @@ from app.services.oci_converter import OCIConfig
 logger = logging.getLogger(__name__)
 
 
+def _prefix_to_netmask(prefix: int) -> str:
+    """Convert a CIDR prefix length to a dotted-decimal netmask.
+
+    >>> _prefix_to_netmask(24)
+    '255.255.255.0'
+    >>> _prefix_to_netmask(25)
+    '255.255.255.128'
+    """
+    mask = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF
+    return f"{(mask >> 24) & 0xFF}.{(mask >> 16) & 0xFF}.{(mask >> 8) & 0xFF}.{mask & 0xFF}"
+
+
 @dataclass
 class SystemdUnitParams:
     """Parameters for init script generation.
@@ -74,9 +86,11 @@ def _generate_init_script(params: SystemdUnitParams) -> str:
     if ip_addr_cidr and "/" in ip_addr_cidr:
         bare_ip = ip_addr_cidr.split("/")[0]
         prefix_len = ip_addr_cidr.split("/")[1]
+        netmask = _prefix_to_netmask(int(prefix_len))
     else:
         bare_ip = ip_addr_cidr or ""
         prefix_len = ""
+        netmask = "255.255.255.0"
 
     if params.ip_address:
         net_block = dedent(f"""\
@@ -96,7 +110,7 @@ def _generate_init_script(params: SystemdUnitParams) -> str:
             ip link set eth0 up 2>/dev/null || true
             ip addr add {ip_addr_cidr} dev eth0 2>/dev/null || true
         elif command -v ifconfig >/dev/null 2>&1; then
-            ifconfig eth0 {bare_ip}/{prefix_len} up 2>/dev/null || true
+            ifconfig eth0 {bare_ip} netmask {netmask} up 2>/dev/null || true
         else
             # Raw sysfs fallback — bring up eth0
             echo 1 > /sys/class/net/eth0/flags 2>/dev/null || true

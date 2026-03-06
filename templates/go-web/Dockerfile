@@ -6,6 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o server .
 
 FROM alpine:3.19
+RUN apk add --no-cache iproute2
 WORKDIR /app
 COPY --from=builder /app/server .
 ENV PORT=3000

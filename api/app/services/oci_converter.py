@@ -50,10 +50,21 @@ class OCIConfig:
 
     @property
     def primary_port(self) -> int:
-        """The primary exposed port, defaulting to 3000."""
+        """The primary exposed port, defaulting to 3000.
+
+        Prefers the explicit PORT env var over EXPOSE directives, because
+        base images can contribute EXPOSE values the app doesn't actually
+        listen on (e.g. nginx:alpine exposes 80 even when the Dockerfile
+        sets PORT=3000 and the config listens on $PORT).
+        """
+        if "PORT" in self.env:
+            try:
+                return int(self.env["PORT"])
+            except ValueError:
+                pass
         if self.exposed_ports:
             return self.exposed_ports[0]
-        return int(self.env.get("PORT", "3000"))
+        return 3000
 
 
 async def _run_command(

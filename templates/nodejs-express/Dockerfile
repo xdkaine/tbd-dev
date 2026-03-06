@@ -1,4 +1,5 @@
 FROM node:20-alpine
+RUN apk add --no-cache iproute2
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci || npm install

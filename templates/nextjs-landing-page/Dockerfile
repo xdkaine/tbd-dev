@@ -15,6 +15,7 @@ RUN npm run build
 
 # Run
 FROM base AS runner
+RUN apk add --no-cache iproute2
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/public ./public
