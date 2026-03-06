@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Site</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #09090b;
+      color: #f4f4f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+    .container { max-width: 480px; }
+    h1 { font-size: 2.5rem; font-weight: 700; line-height: 1.2; margin-bottom: 1rem; }
+    h1 span { color: #00d68f; }
+    p { color: #a1a1aa; line-height: 1.6; margin-bottom: 2rem; }
+    a.btn {
+      display: inline-block;
+      padding: 0.75rem 1.75rem;
+      background: #00d68f;
+      color: #09090b;
+      text-decoration: none;
+      font-weight: 600;
+      border-radius: 6px;
+      transition: opacity 0.15s;
+    }
+    a.btn:hover { opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Welcome to <span>Your Site</span></h1>
+    <p>This site was scaffolded from a TBD template.</p>
+    <a class="btn" href="https://developer.mozilla.org">Learn More</a>
+  </div>
+</body>
+</html>
