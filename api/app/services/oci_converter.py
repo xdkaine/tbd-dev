@@ -13,6 +13,7 @@ Per docs/oci-lxc-conversion.md.
 import asyncio
 import json
 import logging
+import shlex
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -42,11 +43,15 @@ class OCIConfig:
         """Build the full execution command from entrypoint + cmd.
 
         Priority: ENTRYPOINT + CMD, or just CMD, or fallback to 'node server.js'.
+
+        Each part is shell-quoted so that arguments containing spaces or
+        special characters (e.g. nginx's ``-g 'daemon off;'``) survive
+        embedding in a shell script without being split or interpreted.
         """
         parts = self.entrypoint + self.cmd
         if not parts:
             return "node server.js"
-        return " ".join(parts)
+        return " ".join(shlex.quote(p) for p in parts)
 
     @property
     def primary_port(self) -> int:

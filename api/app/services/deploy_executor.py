@@ -708,9 +708,14 @@ async def execute_deploy(
                 if ctx.vmid and ctx.target_node:
                     log("Destroying failed container...")
                     try:
-                        stop_upid = await adapter.stop_lxc(ctx.target_node, ctx.vmid)
-                        if stop_upid:
-                            await adapter.wait_for_task(ctx.target_node, stop_upid, timeout=60.0)
+                        # Stop first — but tolerate "not running" errors
+                        # (the container may have already crashed)
+                        try:
+                            stop_upid = await adapter.stop_lxc(ctx.target_node, ctx.vmid)
+                            if stop_upid:
+                                await adapter.wait_for_task(ctx.target_node, stop_upid, timeout=60.0)
+                        except ProxmoxError as stop_err:
+                            logger.debug("[%s] Stop before destroy failed (container may already be stopped): %s", deploy_id, stop_err)
                         destroy_upid = await adapter.destroy_lxc(ctx.target_node, ctx.vmid)
                         if destroy_upid:
                             await adapter.wait_for_task(ctx.target_node, destroy_upid, timeout=60.0)
@@ -906,9 +911,14 @@ async def execute_deploy(
         if ctx.vmid and ctx.target_node:
             log(f"Cleaning up: destroying failed LXC {ctx.vmid}...")
             try:
-                stop_upid = await adapter.stop_lxc(ctx.target_node, ctx.vmid)
-                if stop_upid:
-                    await adapter.wait_for_task(ctx.target_node, stop_upid, timeout=60.0)
+                # Stop first — but tolerate "not running" errors
+                # (the container may have already crashed)
+                try:
+                    stop_upid = await adapter.stop_lxc(ctx.target_node, ctx.vmid)
+                    if stop_upid:
+                        await adapter.wait_for_task(ctx.target_node, stop_upid, timeout=60.0)
+                except ProxmoxError as stop_err:
+                    logger.debug("[%s] Stop before destroy failed (container may already be stopped): %s", deploy_id, stop_err)
                 destroy_upid = await adapter.destroy_lxc(ctx.target_node, ctx.vmid)
                 if destroy_upid:
                     await adapter.wait_for_task(ctx.target_node, destroy_upid, timeout=60.0)
