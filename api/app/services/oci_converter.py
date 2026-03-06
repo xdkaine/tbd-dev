@@ -236,11 +236,53 @@ async def unpack_rootfs(layout_dir: Path, tag: str) -> Path:
     )
 
 
+def _resolve_oci_blob(layout_dir: Path, digest: str) -> Path:
+    if ":" not in digest:
+        raise ValueError(f"Invalid OCI digest: {digest}")
+    algo, hex_digest = digest.split(":", 1)
+    return layout_dir / "blobs" / algo / hex_digest
+
+
+def _select_manifest_descriptor(manifests: list[dict]) -> dict:
+    for manifest in manifests:
+        platform = manifest.get("platform") or {}
+        if platform.get("os") == "linux" and platform.get("architecture") in {
+            "amd64",
+            "x86_64",
+        }:
+            return manifest
+    return manifests[0]
+
+
+def _extract_config_from_layout(layout_dir: Path) -> OCIConfig:
+    index_path = layout_dir / "index.json"
+    if not index_path.exists():
+        raise FileNotFoundError(f"Missing OCI index.json at {index_path}")
+
+    index = json.loads(index_path.read_text())
+    manifests = index.get("manifests") or []
+    if not manifests:
+        raise ValueError("OCI index.json has no manifests")
+
+    manifest_desc = _select_manifest_descriptor(manifests)
+    manifest_path = _resolve_oci_blob(layout_dir, manifest_desc["digest"])
+    manifest = json.loads(manifest_path.read_text())
+
+    config_desc = manifest.get("config") or {}
+    config_digest = config_desc.get("digest")
+    if not config_digest:
+        raise ValueError("OCI manifest missing config digest")
+
+    config_path = _resolve_oci_blob(layout_dir, config_digest)
+    config_data = json.loads(config_path.read_text())
+    return _parse_oci_stat(config_data)
+
+
 async def extract_oci_config(layout_dir: Path) -> OCIConfig:
-    """Step 3: Extract OCI image configuration using umoci stat.
+    """Step 3: Extract OCI image configuration using OCI layout or umoci stat.
 
     Parses Cmd, Entrypoint, Env, ExposedPorts, and WorkingDir from
-    the OCI image manifest.
+    the OCI image manifest/config.
 
     Args:
         layout_dir: Path to OCI layout
@@ -251,6 +293,23 @@ async def extract_oci_config(layout_dir: Path) -> OCIConfig:
     Raises:
         OCIConversionError: If config extraction fails
     """
+    try:
+        config = _extract_config_from_layout(layout_dir)
+        logger.info(
+            "OCI config extracted (layout): cmd=%s, workdir=%s, ports=%s, env_count=%d",
+            config.exec_command,
+            config.working_dir,
+            config.exposed_ports,
+            len(config.env),
+        )
+        if config.entrypoint or config.cmd or config.env or config.exposed_ports:
+            return config
+    except Exception as exc:
+        logger.warning(
+            "Failed to read OCI config from layout, falling back to umoci stat: %s",
+            exc,
+        )
+
     cmd = [
         "umoci", "stat",
         "--image", f"{layout_dir}:latest",
@@ -279,11 +338,9 @@ async def extract_oci_config(layout_dir: Path) -> OCIConfig:
             details=stdout[:500],
         )
 
-    # Navigate the OCI config structure
-    # umoci stat returns: { "history": [...], "config": { "config": { ... } } }
     config = _parse_oci_stat(stat_data)
     logger.info(
-        "OCI config extracted: cmd=%s, workdir=%s, ports=%s, env_count=%d",
+        "OCI config extracted (umoci): cmd=%s, workdir=%s, ports=%s, env_count=%d",
         config.exec_command,
         config.working_dir,
         config.exposed_ports,

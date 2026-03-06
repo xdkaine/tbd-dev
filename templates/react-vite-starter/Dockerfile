@@ -13,6 +13,10 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
 
-CMD npx serve dist -l tcp://0.0.0.0:${PORT:-3000}
+RUN npm install -g serve@14.2.4
+
+ENV PORT=3000
+EXPOSE 3000
+
+CMD ["serve", "-s", "dist", "-l", "tcp://0.0.0.0:3000"]

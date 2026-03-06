@@ -13,6 +13,7 @@ import re
 import uuid
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.environment import Environment
@@ -108,50 +109,66 @@ async def allocate_vlan(
         )
         return existing_vlan
 
-    # Find the next available VLAN tag
-    max_tag_result = await db.execute(select(func.max(Vlan.vlan_tag)))
-    max_tag = max_tag_result.scalar()
-    next_tag = (max_tag or VLAN_BASE) + 1
+    max_attempts = 5
+    for attempt in range(1, max_attempts + 1):
+        # Find the next available VLAN tag
+        max_tag_result = await db.execute(select(func.max(Vlan.vlan_tag)))
+        max_tag = max_tag_result.scalar()
+        next_tag = (max_tag or VLAN_BASE) + 1
 
-    if next_tag > VLAN_MAX:
-        raise NetworkAllocationError(
-            f"No more VLANs available (max {VLAN_MAX - VLAN_BASE} projects)"
+        if next_tag > VLAN_MAX:
+            raise NetworkAllocationError(
+                f"No more VLANs available (max {VLAN_MAX - VLAN_BASE} projects)"
+            )
+
+        # Derive subnet and gateway
+        subnet = vlan_tag_to_subnet(next_tag)
+        gateway = vlan_tag_to_gateway(next_tag)
+
+        # Create VLAN record in a savepoint to handle concurrent allocations
+        vlan = Vlan(
+            vlan_tag=next_tag,
+            subnet_cidr=subnet,
+            reserved_by_project_id=project_id,
+        )
+        db.add(vlan)
+        try:
+            async with db.begin_nested():
+                await db.flush()
+        except IntegrityError as exc:
+            await db.rollback()
+            logger.warning(
+                "VLAN allocation collision on tag %d (attempt %d/%d): %s",
+                next_tag,
+                attempt,
+                max_attempts,
+                exc,
+            )
+            continue
+
+        logger.info(
+            "Allocated VLAN %d (subnet=%s, gw=%s) for project %s",
+            next_tag, subnet, gateway, project_id,
         )
 
-    # Derive subnet and gateway
-    subnet = vlan_tag_to_subnet(next_tag)
-    gateway = vlan_tag_to_gateway(next_tag)
+        # Audit
+        await write_audit_log(
+            db,
+            actor_user_id=actor_user_id,
+            action="vlan.allocate",
+            target_type="vlan",
+            target_id=str(vlan.id),
+            payload={
+                "project_id": str(project_id),
+                "vlan_tag": next_tag,
+                "subnet_cidr": subnet,
+                "gateway": gateway,
+            },
+        )
 
-    # Create VLAN record
-    vlan = Vlan(
-        vlan_tag=next_tag,
-        subnet_cidr=subnet,
-        reserved_by_project_id=project_id,
-    )
-    db.add(vlan)
-    await db.flush()
+        return vlan
 
-    logger.info(
-        "Allocated VLAN %d (subnet=%s, gw=%s) for project %s",
-        next_tag, subnet, gateway, project_id,
-    )
-
-    # Audit
-    await write_audit_log(
-        db,
-        actor_user_id=actor_user_id,
-        action="vlan.allocate",
-        target_type="vlan",
-        target_id=str(vlan.id),
-        payload={
-            "project_id": str(project_id),
-            "vlan_tag": next_tag,
-            "subnet_cidr": subnet,
-            "gateway": gateway,
-        },
-    )
-
-    return vlan
+    raise NetworkAllocationError("Failed to allocate VLAN after multiple attempts")
 
 
 async def deallocate_vlan(
