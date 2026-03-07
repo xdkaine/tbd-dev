@@ -11,6 +11,7 @@ export default function AuditPage() {
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [filterAction, setFilterAction] = useState("");
   const [filterTarget, setFilterTarget] = useState("");
@@ -19,6 +20,7 @@ export default function AuditPage() {
   const fetchAudit = useCallback(async () => {
     setLoading(true);
     try {
+      setError(null);
       const res = await api.audit.list({
         skip: page * limit,
         limit,
@@ -27,8 +29,8 @@ export default function AuditPage() {
       });
       setEntries(res.items);
       setTotal(res.total);
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load audit log");
     } finally {
       setLoading(false);
     }
@@ -95,6 +97,8 @@ export default function AuditPage() {
       {/* Table */}
       {loading ? (
         <p className="text-sm text-zinc-500">Loading...</p>
+      ) : error ? (
+        <p className="text-sm text-red-400">{error}</p>
       ) : entries.length === 0 ? (
         <p className="py-8 text-center text-sm text-zinc-500">
           No audit entries found.

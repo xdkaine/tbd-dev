@@ -35,11 +35,17 @@ export default function ProjectDetailPage() {
   const [deploys, setDeploys] = useState<Deploy[]>([]);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastPollingStatusRef = useRef<string>("idle");
+  const abortRef = useRef<AbortController | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const fetchAll = useCallback(async () => {
+    // Abort any in-flight polling request to prevent stale responses overwriting fresh data
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const [proj, envs, blds, deps] = await Promise.all([
         api.projects.get(projectId),
@@ -47,11 +53,13 @@ export default function ProjectDetailPage() {
         api.builds.list(projectId),
         api.deploys.list(projectId),
       ]);
+      if (controller.signal.aborted) return;
       setProject(proj);
       setEnvironments(envs.items);
       setBuilds(blds.items);
       setDeploys(deps.items);
     } catch (err) {
+      if (controller.signal.aborted) return;
       if (err instanceof ApiError && err.status === 404) {
         setError("Project not found");
       } else {
@@ -986,6 +994,7 @@ function DeploysTab({
   const envMap = Object.fromEntries(environments.map((e) => [e.id, e]));
 
   async function handleRollback(deployId: string) {
+    if (rolling) return;
     setRolling(deployId);
     setActionError("");
     try {
@@ -999,6 +1008,7 @@ function DeploysTab({
   }
 
   async function handleStop(deployId: string) {
+    if (stopping) return;
     setStopping(deployId);
     setActionError("");
     try {
@@ -1012,6 +1022,7 @@ function DeploysTab({
   }
 
   async function handleStart(deployId: string) {
+    if (starting) return;
     setStarting(deployId);
     setActionError("");
     try {
@@ -1025,6 +1036,7 @@ function DeploysTab({
   }
 
   async function handlePromote(deployId: string) {
+    if (promoting) return;
     setPromoting(deployId);
     setActionError("");
     try {
@@ -1038,7 +1050,7 @@ function DeploysTab({
   }
 
   async function handleDestroy() {
-    if (!destroyTarget) return;
+    if (!destroyTarget || destroying) return;
     setDestroying(true);
     setActionError("");
     try {
@@ -2060,6 +2072,8 @@ function SettingsTab({
           <button
             onClick={handleToggleAutoDeploy}
             disabled={saving}
+            role="switch"
+            aria-checked={autoDeploy}
             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:ring-offset-2 disabled:opacity-50 ${
               autoDeploy ? "bg-brand-600" : "bg-zinc-700"
             }`}
@@ -2199,6 +2213,8 @@ function SettingsTab({
           <button
             onClick={handleToggleDeployLock}
             disabled={saving}
+            role="switch"
+            aria-checked={deployLocked}
             className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:ring-offset-2 disabled:opacity-50 ${
               deployLocked ? "bg-red-500" : "bg-zinc-700"
             }`}

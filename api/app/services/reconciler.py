@@ -143,7 +143,7 @@ async def _reconcile_stuck_deploys(db: AsyncSession) -> int:
         select(Deploy).where(
             Deploy.status.in_(in_progress_states),
             Deploy.created_at < cutoff,
-        )
+        ).with_for_update(skip_locked=True)
     )
     stuck_deploys = result.scalars().all()
 

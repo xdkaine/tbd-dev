@@ -111,6 +111,12 @@ async def allocate_vlan(
 
     max_attempts = 5
     for attempt in range(1, max_attempts + 1):
+        # Lock ALL vlan rows to serialise concurrent allocations.
+        # This prevents two callers from both reading the same max tag
+        # and colliding on insert.  The lock is held only for the
+        # duration of this transaction (or savepoint) which is brief.
+        await db.execute(select(Vlan.id).with_for_update())
+
         # Find the next available VLAN tag
         max_tag_result = await db.execute(select(func.max(Vlan.vlan_tag)))
         max_tag = max_tag_result.scalar()
@@ -125,7 +131,9 @@ async def allocate_vlan(
         subnet = vlan_tag_to_subnet(next_tag)
         gateway = vlan_tag_to_gateway(next_tag)
 
-        # Create VLAN record in a savepoint to handle concurrent allocations
+        # Create VLAN record in a savepoint as a safety net.
+        # The FOR UPDATE lock above should prevent collisions, but we
+        # keep the savepoint + retry for defence-in-depth.
         vlan = Vlan(
             vlan_tag=next_tag,
             subnet_cidr=subnet,

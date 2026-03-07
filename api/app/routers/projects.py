@@ -5,6 +5,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -99,7 +100,14 @@ async def create_project(
         default_env=body.default_env,
     )
     db.add(project)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Project with slug '{body.slug}' already exists",
+        )
 
     # Create default environment
     default_env = Environment(
@@ -265,6 +273,10 @@ async def delete_project(
     deploy_rows = await db.execute(deploys_q)
     deploys = deploy_rows.scalars().all()
 
+    # Track critical teardown failures (container destruction).  If any
+    # container can't be destroyed we abort the deletion to avoid orphaned
+    # LXC containers with no database record to track them.
+    critical_failures: list[str] = []
     for deploy in deploys:
         is_active = deploy.status in ("active", "superseded")
         try:
@@ -275,12 +287,23 @@ async def delete_project(
                 destroy_container=True,
             )
         except Exception as exc:
-            # Log but don't abort – best-effort cleanup; the DB cascade
-            # will still remove the rows so we won't leave ghost records.
+            deploy_short = str(deploy.id)[:8]
             logger.warning(
                 "Teardown failed for deploy %s during project delete: %s",
-                str(deploy.id)[:8], exc,
+                deploy_short, exc,
             )
+            critical_failures.append(f"deploy {deploy_short}: {exc}")
+
+    if critical_failures:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Cannot delete project: infrastructure teardown failed for "
+                f"{len(critical_failures)} deploy(s). Orphaned containers must "
+                "be cleaned up before the project can be deleted. Failures: "
+                + "; ".join(critical_failures)
+            ),
+        )
 
     # If no deploy was active but the project still has a production Nginx
     # config on disk, clean it up explicitly.

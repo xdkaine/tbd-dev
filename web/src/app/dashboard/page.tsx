@@ -539,6 +539,7 @@ function ImportFromGitHub({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
+            aria-label="Search repositories"
             className="mb-3 block w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
           />
           <div className="max-h-80 space-y-1 overflow-y-auto">

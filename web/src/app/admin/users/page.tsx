@@ -39,6 +39,7 @@ export default function UsersPage() {
   const [roleEditUserId, setRoleEditUserId] = useState<string | null>(null);
   const [roleEditValue, setRoleEditValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const limit = 25;
 
   const isFaculty = user?.role === "JAS-Faculty";
@@ -46,6 +47,7 @@ export default function UsersPage() {
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
+      setError(null);
       const res = await api.admin.users.list({
         skip: page * limit,
         limit,
@@ -54,8 +56,8 @@ export default function UsersPage() {
       });
       setUsers(res.items);
       setTotal(res.total);
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load users");
     } finally {
       setLoading(false);
     }
@@ -97,8 +99,8 @@ export default function UsersPage() {
       setRoleEditUserId(null);
       setRoleEditValue("");
       await fetchUsers();
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update role");
     } finally {
       setSaving(false);
     }
@@ -160,6 +162,9 @@ export default function UsersPage() {
       </div>
 
       {/* Table */}
+      {error && (
+        <p className="mb-4 text-sm text-red-400">{error}</p>
+      )}
       {loading ? (
         <p className="text-sm text-zinc-500">Loading users...</p>
       ) : users.length === 0 ? (

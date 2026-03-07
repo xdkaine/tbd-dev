@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api, ApiError } from "@/lib/api";
 import { formatDate, timeAgo } from "@/lib/utils";
+import { ConfirmModal } from "@/components/modal";
 import type { Project, Secret } from "@/lib/types";
 
 type Scope = "project" | "production" | "staging" | "preview";
@@ -18,17 +19,20 @@ export default function SecretsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [deleteConfirmKey, setDeleteConfirmKey] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
+      setError(null);
       const [proj, sec] = await Promise.all([
         api.projects.get(projectId),
         api.secrets.list(projectId),
       ]);
       setProject(proj);
       setSecrets(sec.items);
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load secrets");
     } finally {
       setLoading(false);
     }
@@ -39,12 +43,13 @@ export default function SecretsPage() {
   }, [fetchData]);
 
   async function handleDelete(key: string) {
+    setDeleteConfirmKey(null);
     setDeleting(key);
     try {
       await api.secrets.delete(projectId, key);
       fetchData();
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete secret");
     } finally {
       setDeleting(null);
     }
@@ -85,6 +90,10 @@ export default function SecretsPage() {
         <span className="mx-1 text-zinc-600">/</span>
         <span className="font-medium text-zinc-300">Secrets</span>
       </div>
+
+      {error && (
+        <p className="mb-4 text-sm text-red-400">{error}</p>
+      )}
 
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
@@ -168,7 +177,7 @@ export default function SecretsPage() {
                           </td>
                           <td className="px-4 py-2 text-right">
                             <button
-                              onClick={() => handleDelete(s.key)}
+                              onClick={() => setDeleteConfirmKey(s.key)}
                               disabled={deleting === s.key}
                               className="text-xs text-red-400 hover:text-red-300 disabled:opacity-50"
                             >
@@ -185,6 +194,17 @@ export default function SecretsPage() {
           })}
         </div>
       )}
+
+      <ConfirmModal
+        open={deleteConfirmKey !== null}
+        onClose={() => setDeleteConfirmKey(null)}
+        onConfirm={() => deleteConfirmKey && handleDelete(deleteConfirmKey)}
+        title="Delete Secret"
+        description={`Are you sure you want to delete the secret "${deleteConfirmKey}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleting !== null}
+      />
     </div>
   );
 }

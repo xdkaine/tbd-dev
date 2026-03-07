@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { Modal } from "@/components/modal";
@@ -257,6 +257,7 @@ function DeployTemplateModal({
   onDeployed: (projectId: string) => void;
 }) {
   const router = useRouter();
+  const titleId = useId();
   const [repoName, setRepoName] = useState(template.github_repo);
   const [description, setDescription] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
@@ -286,14 +287,14 @@ function DeployTemplateModal({
   }
 
   return (
-    <Modal open onClose={onClose}>
+    <Modal open onClose={onClose} ariaLabelledBy={titleId}>
       <div className="p-6">
         <div className="mb-4 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300">
             <FrameworkIcon framework={template.framework} />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-zinc-100">
+            <h3 id={titleId} className="text-lg font-semibold text-zinc-100">
               Deploy {template.name}
             </h3>
             <p className="text-xs text-zinc-500">

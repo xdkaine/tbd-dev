@@ -110,12 +110,30 @@ async def _count_queued(db: AsyncSession, env_id: uuid.UUID) -> int:
     return result.scalar() or 0
 
 
-async def _count_in_progress(db: AsyncSession, env_id: uuid.UUID) -> int:
+async def _count_in_progress(
+    db: AsyncSession, env_id: uuid.UUID, *, lock: bool = False,
+) -> int:
     """Count deploys that are actively being processed (not queued, not terminal).
 
     In-progress states: building, artifact_ready, provisioning, healthy.
+
+    When *lock* is True the matching rows are locked with FOR UPDATE so
+    that concurrent promoters serialise properly and cannot both see a
+    stale count.
     """
     in_progress_states = ["building", "artifact_ready", "provisioning", "healthy"]
+    if lock:
+        # Lock the actual deploy rows to serialise concurrent checks.
+        # We SELECT the rows first (FOR UPDATE), then count in Python.
+        result = await db.execute(
+            select(Deploy.id)
+            .where(
+                Deploy.env_id == env_id,
+                Deploy.status.in_(in_progress_states),
+            )
+            .with_for_update()
+        )
+        return len(result.all())
     result = await db.execute(
         select(func.count()).where(
             Deploy.env_id == env_id,
@@ -161,7 +179,8 @@ async def _try_promote_next(db: AsyncSession, env_id: uuid.UUID) -> bool:
 
     # Re-check concurrency after acquiring the lock to prevent over-promotion
     # when two callers both pass the initial count check simultaneously.
-    in_progress = await _count_in_progress(db, env_id)
+    # Use lock=True to serialise with other concurrent promoters.
+    in_progress = await _count_in_progress(db, env_id, lock=True)
     if in_progress >= settings.deploy_max_concurrent:
         logger.debug(
             "Env %s at concurrency limit after lock (%d/%d) — not promoting",

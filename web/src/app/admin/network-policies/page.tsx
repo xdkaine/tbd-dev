@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/auth";
 import { formatDate } from "@/lib/utils";
+import { ConfirmModal } from "@/components/modal";
 import type {
   NetworkPolicy,
   NetworkPolicyCreate,
@@ -28,6 +29,8 @@ export default function NetworkPoliciesPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const limit = 25;
 
   const isFaculty = user?.role === "JAS-Faculty";
@@ -46,6 +49,7 @@ export default function NetworkPoliciesPage() {
   const fetchPolicies = useCallback(async () => {
     setLoading(true);
     try {
+      setError(null);
       const res = await api.admin.networkPolicies.list({
         skip: page * limit,
         limit,
@@ -53,8 +57,8 @@ export default function NetworkPoliciesPage() {
       });
       setPolicies(res.items);
       setTotal(res.total);
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load network policies");
     } finally {
       setLoading(false);
     }
@@ -64,8 +68,8 @@ export default function NetworkPoliciesPage() {
     try {
       const res = await api.projects.list(0, 200);
       setProjects(res.items);
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load projects");
     }
   }, []);
 
@@ -112,21 +116,21 @@ export default function NetworkPoliciesPage() {
         action: "allow",
       });
       await fetchPolicies();
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create policy");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(policyId: string) {
-    if (!confirm("Delete this network policy?")) return;
+    setDeleteConfirmId(null);
     setDeleting(policyId);
     try {
       await api.admin.networkPolicies.delete(policyId);
       await fetchPolicies();
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete policy");
     } finally {
       setDeleting(null);
     }
@@ -139,8 +143,8 @@ export default function NetworkPoliciesPage() {
         enabled: !policy.enabled,
       });
       await fetchPolicies();
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to toggle policy");
     } finally {
       setToggling(null);
     }
@@ -348,6 +352,9 @@ export default function NetworkPoliciesPage() {
       </div>
 
       {/* Table */}
+      {error && (
+        <p className="mb-4 text-sm text-red-400">{error}</p>
+      )}
       {loading ? (
         <p className="text-sm text-zinc-500">Loading policies...</p>
       ) : policies.length === 0 ? (
@@ -455,7 +462,7 @@ export default function NetworkPoliciesPage() {
                                 : "Enable"}
                           </button>
                           <button
-                            onClick={() => handleDelete(p.id)}
+                            onClick={() => setDeleteConfirmId(p.id)}
                             disabled={deleting === p.id}
                             className="rounded-lg border border-red-900 px-2 py-0.5 text-xs text-red-400 hover:bg-red-950/30 disabled:opacity-50"
                           >
@@ -498,6 +505,17 @@ export default function NetworkPoliciesPage() {
           )}
         </>
       )}
+
+      <ConfirmModal
+        open={deleteConfirmId !== null}
+        onClose={() => setDeleteConfirmId(null)}
+        onConfirm={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+        title="Delete Network Policy"
+        description="Are you sure you want to delete this network policy? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleting !== null}
+      />
     </div>
   );
 }

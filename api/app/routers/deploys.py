@@ -178,9 +178,13 @@ async def _get_production_deploy_id(
 
 
 async def _count_running_deploys(
-    db: AsyncSession, project_id: uuid.UUID,
+    db: AsyncSession, project_id: uuid.UUID, *, lock: bool = False,
 ) -> int:
-    """Count deploys with a running container (active or superseded with container)."""
+    """Count deploys with a running container (active or superseded with container).
+
+    When *lock* is True, the matching deploy rows are locked with FOR UPDATE
+    to serialise concurrent container-limit checks for the same project.
+    """
     env_result = await db.execute(
         select(Environment.id).where(Environment.project_id == project_id)
     )
@@ -188,13 +192,27 @@ async def _count_running_deploys(
     if not env_ids:
         return 0
 
-    result = await db.execute(
-        select(func.count()).where(
-            Deploy.env_id.in_(env_ids),
-            Deploy.status.in_(["active", "superseded"]),
-            Deploy.container_vmid.isnot(None),
-        )
+    query = select(func.count()).where(
+        Deploy.env_id.in_(env_ids),
+        Deploy.status.in_(["active", "superseded"]),
+        Deploy.container_vmid.isnot(None),
     )
+
+    if lock:
+        # Lock the actual rows to prevent concurrent callers from both
+        # seeing a count below the limit.
+        locked_result = await db.execute(
+            select(Deploy.id)
+            .where(
+                Deploy.env_id.in_(env_ids),
+                Deploy.status.in_(["active", "superseded"]),
+                Deploy.container_vmid.isnot(None),
+            )
+            .with_for_update()
+        )
+        return len(locked_result.all())
+
+    result = await db.execute(query)
     return result.scalar() or 0
 
 
@@ -215,7 +233,7 @@ async def _check_container_limit(
     Raises:
         HTTPException(409) when the limit would be exceeded.
     """
-    running = await _count_running_deploys(db, project_id)
+    running = await _count_running_deploys(db, project_id, lock=True)
     if running >= MAX_RUNNING_PER_PROJECT:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -425,8 +443,11 @@ async def rollback_deploy(
     """
     check_permission(current_user.role, "deploys.rollback")
 
-    # Load the deploy
-    result = await db.execute(select(Deploy).where(Deploy.id == deploy_id))
+    # Load the deploy with a row lock to prevent concurrent rollbacks
+    # from both reading the same deploy as 'active'.
+    result = await db.execute(
+        select(Deploy).where(Deploy.id == deploy_id).with_for_update()
+    )
     deploy = result.scalar_one_or_none()
     if deploy is None:
         raise HTTPException(status_code=404, detail="Deploy not found")
@@ -446,6 +467,8 @@ async def rollback_deploy(
 
     # Find the previous deploy that still has a live container
     # (superseded or stopped, with container_vmid set)
+    # Lock the candidate row to prevent a concurrent rollback from
+    # re-promoting the same deploy simultaneously.
     prev_result = await db.execute(
         select(Deploy)
         .where(
@@ -457,6 +480,7 @@ async def rollback_deploy(
         )
         .order_by(Deploy.promoted_at.desc().nullslast(), Deploy.created_at.desc())
         .limit(1)
+        .with_for_update()
     )
     previous_deploy = prev_result.scalar_one_or_none()
 

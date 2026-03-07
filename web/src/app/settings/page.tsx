@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth";
 import { api } from "@/lib/api";
+import { ConfirmModal } from "@/components/modal";
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
@@ -12,6 +13,7 @@ export default function SettingsPage() {
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [linking, setLinking] = useState(false);
   const [unlinking, setUnlinking] = useState(false);
+  const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
 
   /* Handle redirect back from GitHub OAuth callback */
   useEffect(() => {
@@ -52,9 +54,7 @@ export default function SettingsPage() {
   }
 
   async function handleUnlinkGitHub() {
-    if (!confirm("Unlink your GitHub account? You can re-link it at any time.")) {
-      return;
-    }
+    setShowUnlinkConfirm(false);
     setUnlinking(true);
     setMessage("");
     try {
@@ -147,7 +147,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <button
-              onClick={handleUnlinkGitHub}
+              onClick={() => setShowUnlinkConfirm(true)}
               disabled={unlinking}
               className="rounded-md border border-red-800 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-950/30 disabled:opacity-50"
             >
@@ -173,6 +173,17 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        open={showUnlinkConfirm}
+        onClose={() => setShowUnlinkConfirm(false)}
+        onConfirm={handleUnlinkGitHub}
+        title="Unlink GitHub Account"
+        description="Are you sure you want to unlink your GitHub account? You can re-link it at any time."
+        confirmLabel="Unlink"
+        variant="danger"
+        loading={unlinking}
+      />
     </div>
   );
 }

@@ -9,13 +9,15 @@ export default function VlansPage() {
   const { user } = useAuth();
   const [vlans, setVlans] = useState<Vlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchVlans = useCallback(async () => {
     try {
+      setError(null);
       const res = await api.networks.listVlans();
       setVlans(res.items);
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load VLANs");
     } finally {
       setLoading(false);
     }
@@ -55,6 +57,8 @@ export default function VlansPage() {
 
       {loading ? (
         <p className="text-sm text-zinc-500">Loading VLANs...</p>
+      ) : error ? (
+        <p className="text-sm text-red-400">{error}</p>
       ) : vlans.length === 0 ? (
         <p className="py-8 text-center text-sm text-zinc-500">
           No VLANs allocated yet. VLANs are auto-allocated when projects are

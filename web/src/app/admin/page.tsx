@@ -10,13 +10,15 @@ export default function AdminDashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {
+      setError(null);
       const res = await api.admin.stats();
       setStats(res);
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load admin stats");
     } finally {
       setLoading(false);
     }
@@ -48,6 +50,8 @@ export default function AdminDashboardPage() {
 
       {loading ? (
         <p className="text-sm text-zinc-500">Loading platform stats...</p>
+      ) : error ? (
+        <p className="text-sm text-red-400">{error}</p>
       ) : stats ? (
         <>
           {/* Stats grid */}

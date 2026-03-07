@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useId, useRef } from "react";
 
 /* ---------------------------------------------------------------------- */
 /*  Reusable Modal component                                               */
@@ -10,27 +10,76 @@ interface ModalProps {
   open: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  /** Optional override for aria-labelledby (defaults to auto-generated id) */
+  ariaLabelledBy?: string;
 }
 
 /** Backdrop + centered panel. Closes on Escape or backdrop click. */
-export function Modal({ open, onClose, children }: ModalProps) {
+export function Modal({ open, onClose, children, ariaLabelledBy }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const autoId = useId();
+  const labelId = ariaLabelledBy ?? `modal-title-${autoId}`;
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+
+      // Focus trap: Tab / Shift+Tab cycles within the modal
+      if (e.key === "Tab" && panelRef.current) {
+        const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea, input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusable.length === 0) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
     },
     [onClose],
   );
 
   useEffect(() => {
     if (open) {
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
       document.addEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "hidden";
+
+      // Move focus into the modal panel
+      requestAnimationFrame(() => {
+        if (panelRef.current) {
+          const firstFocusable = panelRef.current.querySelector<HTMLElement>(
+            'a[href], button:not([disabled]), textarea, input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          );
+          if (firstFocusable) firstFocusable.focus();
+          else panelRef.current.focus();
+        }
+      });
     }
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
+
+      // Restore focus to the element that opened the modal
+      if (previousFocusRef.current && typeof previousFocusRef.current.focus === "function") {
+        previousFocusRef.current.focus();
+      }
     };
   }, [open, handleKeyDown]);
 
@@ -44,7 +93,14 @@ export function Modal({ open, onClose, children }: ModalProps) {
       }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
     >
-      <div className="w-full max-w-md rounded-lg bg-zinc-900 border border-zinc-800 shadow-lg shadow-black/50">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelId}
+        tabIndex={-1}
+        className="w-full max-w-md rounded-lg bg-zinc-900 border border-zinc-800 shadow-lg shadow-black/50 outline-none"
+      >
         {children}
       </div>
     </div>
@@ -79,11 +135,13 @@ export function ConfirmModal({
   loading = false,
 }: ConfirmModalProps) {
   const isDanger = variant === "danger";
+  const titleId = useId();
 
   return (
-    <Modal open={open} onClose={onClose}>
+    <Modal open={open} onClose={onClose} ariaLabelledBy={titleId}>
       <div className="p-6">
         <h3
+          id={titleId}
           className={`text-lg font-semibold ${isDanger ? "text-red-400" : "text-zinc-100"}`}
         >
           {title}

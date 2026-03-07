@@ -59,6 +59,14 @@ async def check_user_aggregate_quota(
     ):
         return
 
+    # Lock all the user's project rows for the duration of this check.
+    # This serialises concurrent quota checks for the same user so that
+    # two simultaneous project creations cannot both pass the limit.
+    lock_q = select(Project.id).where(Project.owner_id == owner_id)
+    if exclude_project_id:
+        lock_q = lock_q.where(Project.id != exclude_project_id)
+    await db.execute(lock_q.with_for_update())
+
     # Count projects
     if settings.user_max_projects > 0:
         project_count_q = select(func.count(Project.id)).where(
@@ -75,7 +83,10 @@ async def check_user_aggregate_quota(
                 "projects", project_count, settings.user_max_projects
             )
 
-    # Sum resource quotas across all user's projects
+    # Sum resource quotas across all user's projects.
+    # The project rows are already locked above via FOR UPDATE, so the
+    # quota rows joined through those projects are effectively serialised
+    # for this user.
     resource_q = (
         select(
             func.coalesce(func.sum(Quota.cpu_limit), 0).label("total_cpu"),

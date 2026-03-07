@@ -285,117 +285,142 @@ async def deploy_template(
     repo_github_id = new_repo["id"]
     default_branch = new_repo.get("default_branch", "main")
 
-    # 4. Create TBD project (repo is immediately ready — we pushed the initial commit)
-    project_slug = body.repo_name.lower().replace(".", "-").replace("_", "-")
-
-    # Ensure slug uniqueness
-    existing = await db.execute(select(Project).where(Project.slug == project_slug))
-    if existing.scalar_one_or_none():
-        # Append a short suffix to avoid collision
-        import uuid as _uuid
-        project_slug = f"{project_slug}-{str(_uuid.uuid4())[:4]}"
-
-    project = Project(
-        name=body.repo_name,
-        slug=project_slug,
-        repo_url=repo_html_url,
-        owner_id=current_user.id,
-        default_env="production",
-        framework=template.framework,
-    )
-    db.add(project)
-    await db.flush()
-
-    # Create default environment + quota
-    default_env = Environment(
-        project_id=project.id,
-        name="production",
-        type="production",
-    )
-    db.add(default_env)
-
-    quota = Quota(project_id=project.id)
-    db.add(quota)
-
-    await db.flush()
-
-    # Auto-allocate VLAN
-    try:
-        await auto_allocate_on_project_create(db, project, current_user.id)
-    except Exception as e:
-        logger.warning(
-            "VLAN auto-allocation failed for template project %s: %s",
-            project.slug, e,
-        )
-
-    # 5. Connect the repo
-    repo_record = Repo(
-        project_id=project.id,
-        provider="github",
-        repo_id=str(repo_github_id),
-        repo_full_name=repo_full_name,
-        default_branch=default_branch,
-        install_id=None,
-        created_from_template=True,
-        template_slug=template.slug,
-    )
-    db.add(repo_record)
-    await db.flush()
-
-    # Set up webhook on the new repo
-    webhook_url = "https://smee.io/5yCWAJS2wt6g3Eip"
-    webhook_secret = app_settings.github_webhook_secret or None
-    hook = await create_repo_webhook(
-        token=user.github_token,
-        repo_full_name=repo_full_name,
-        webhook_url=webhook_url,
-        secret=webhook_secret,
-    )
-    if hook:
-        logger.info("Webhook set up for template repo %s", repo_full_name)
-
-    # 6. Trigger initial build
-    # The commit already exists (we pushed it in create_repo_from_template),
-    # so get_branch_head_sha should succeed on the first call.
+    # ── All DB operations are wrapped in a savepoint so they atomically
+    #    succeed or roll back together.  If anything fails after the GitHub
+    #    repo was already created, we attempt to delete the orphaned repo
+    #    (compensation).
     initial_build_id = None
-    head_sha = await get_branch_head_sha(
-        token=user.github_token,
-        repo_full_name=repo_full_name,
-        branch=default_branch,
-    )
-    if head_sha:
-        from app.services.build_coordinator import create_build_for_push
+    project = None
+    try:
+        async with db.begin_nested():
+            # 4. Create TBD project
+            project_slug = body.repo_name.lower().replace(".", "-").replace("_", "-")
 
-        ref = f"refs/heads/{default_branch}"
-        build = await create_build_for_push(db, repo_record, head_sha, ref)
-        initial_build_id = build.id
-        logger.info(
-            "Initial build %s created for template project %s @ %s",
-            build.id, repo_full_name, head_sha[:8],
+            # Ensure slug uniqueness
+            existing = await db.execute(select(Project).where(Project.slug == project_slug))
+            if existing.scalar_one_or_none():
+                import uuid as _uuid
+                project_slug = f"{project_slug}-{str(_uuid.uuid4())[:4]}"
+
+            project = Project(
+                name=body.repo_name,
+                slug=project_slug,
+                repo_url=repo_html_url,
+                owner_id=current_user.id,
+                default_env="production",
+                framework=template.framework,
+            )
+            db.add(project)
+            await db.flush()
+
+            # Create default environment + quota
+            default_env = Environment(
+                project_id=project.id,
+                name="production",
+                type="production",
+            )
+            db.add(default_env)
+
+            quota = Quota(project_id=project.id)
+            db.add(quota)
+
+            await db.flush()
+
+            # Auto-allocate VLAN
+            try:
+                await auto_allocate_on_project_create(db, project, current_user.id)
+            except Exception as e:
+                logger.warning(
+                    "VLAN auto-allocation failed for template project %s: %s",
+                    project.slug, e,
+                )
+
+            # 5. Connect the repo
+            repo_record = Repo(
+                project_id=project.id,
+                provider="github",
+                repo_id=str(repo_github_id),
+                repo_full_name=repo_full_name,
+                default_branch=default_branch,
+                install_id=None,
+                created_from_template=True,
+                template_slug=template.slug,
+            )
+            db.add(repo_record)
+            await db.flush()
+
+            # Set up webhook on the new repo
+            webhook_url = "https://smee.io/5yCWAJS2wt6g3Eip"
+            webhook_secret = app_settings.github_webhook_secret or None
+            hook = await create_repo_webhook(
+                token=user.github_token,
+                repo_full_name=repo_full_name,
+                webhook_url=webhook_url,
+                secret=webhook_secret,
+            )
+            if hook:
+                logger.info("Webhook set up for template repo %s", repo_full_name)
+
+            # 6. Trigger initial build
+            head_sha = await get_branch_head_sha(
+                token=user.github_token,
+                repo_full_name=repo_full_name,
+                branch=default_branch,
+            )
+            if head_sha:
+                from app.services.build_coordinator import create_build_for_push
+
+                ref = f"refs/heads/{default_branch}"
+                build = await create_build_for_push(db, repo_record, head_sha, ref)
+                initial_build_id = build.id
+                logger.info(
+                    "Initial build %s created for template project %s @ %s",
+                    build.id, repo_full_name, head_sha[:8],
+                )
+            else:
+                logger.warning(
+                    "Could not fetch HEAD SHA for %s/%s — skipping initial build. "
+                    "The first push will trigger a build via webhook.",
+                    repo_full_name, default_branch,
+                )
+
+            # Audit
+            await write_audit_log(
+                db,
+                actor_user_id=current_user.id,
+                action="template.deploy",
+                target_type="project",
+                target_id=str(project.id),
+                payload={
+                    "template_slug": slug,
+                    "repo_full_name": repo_full_name,
+                    "build_id": str(initial_build_id) if initial_build_id else None,
+                },
+            )
+
+        # Savepoint released — commit so the background builder can see records
+        await db.commit()
+
+    except Exception as exc:
+        # All DB changes within the savepoint have been rolled back.
+        # Attempt to delete the orphaned GitHub repo (compensation).
+        logger.error(
+            "Template deploy DB operations failed for %s — rolling back. Error: %s",
+            repo_full_name, exc,
         )
-    else:
-        logger.warning(
-            "Could not fetch HEAD SHA for %s/%s — skipping initial build. "
-            "The first push will trigger a build via webhook.",
-            repo_full_name, default_branch,
+        try:
+            from app.services.github import delete_github_repo
+            await delete_github_repo(token=user.github_token, repo_full_name=repo_full_name)
+            logger.info("Compensated: deleted orphaned GitHub repo %s", repo_full_name)
+        except Exception as cleanup_exc:
+            logger.error(
+                "Failed to delete orphaned GitHub repo %s during compensation: %s",
+                repo_full_name, cleanup_exc,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create project from template. The operation has been rolled back.",
         )
-
-    # Audit
-    await write_audit_log(
-        db,
-        actor_user_id=current_user.id,
-        action="template.deploy",
-        target_type="project",
-        target_id=str(project.id),
-        payload={
-            "template_slug": slug,
-            "repo_full_name": repo_full_name,
-            "build_id": str(initial_build_id) if initial_build_id else None,
-        },
-    )
-
-    # Commit so the background builder can see the records
-    await db.commit()
 
     # Launch builder as background task (after commit)
     if initial_build_id:

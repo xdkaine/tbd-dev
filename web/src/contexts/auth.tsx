@@ -63,8 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await api.auth.me();
       setUser(me);
-    } catch {
-      /* ignore — user will see stale data */
+    } catch (err) {
+      // Log so developers can diagnose stale-session issues in the console
+      console.warn("Failed to refresh user session:", err);
     }
   }, []);
 

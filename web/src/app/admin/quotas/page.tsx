@@ -15,6 +15,7 @@ export default function QuotasPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<QuotaUpdate>({});
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const limit = 25;
 
   const isFaculty = user?.role === "JAS-Faculty";
@@ -22,6 +23,7 @@ export default function QuotasPage() {
   const fetchQuotas = useCallback(async () => {
     setLoading(true);
     try {
+      setError(null);
       const res = await api.admin.quotas.list({
         skip: page * limit,
         limit,
@@ -29,8 +31,8 @@ export default function QuotasPage() {
       });
       setQuotas(res.items);
       setTotal(res.total);
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load quotas");
     } finally {
       setLoading(false);
     }
@@ -71,8 +73,8 @@ export default function QuotasPage() {
       setEditingId(null);
       setEditValues({});
       await fetchQuotas();
-    } catch {
-      /* */
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update quota");
     } finally {
       setSaving(false);
     }
@@ -117,12 +119,16 @@ export default function QuotasPage() {
             setSearch(e.target.value);
             setPage(0);
           }}
+          aria-label="Search projects"
           className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
           placeholder="Search projects..."
         />
       </div>
 
       {/* Table */}
+      {error && (
+        <p className="mb-4 text-sm text-red-400">{error}</p>
+      )}
       {loading ? (
         <p className="text-sm text-zinc-500">Loading quotas...</p>
       ) : quotas.length === 0 ? (

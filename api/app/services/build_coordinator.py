@@ -266,6 +266,8 @@ async def trigger_deploy(
         raise ValueError(str(e)) from e
 
     # Check per-project container limit (max 3 running deploys)
+    # Lock the running deploy rows with FOR UPDATE to prevent two
+    # concurrent triggers from both passing the limit check.
     from sqlalchemy import func as sa_func
 
     env_ids_result = await db.execute(
@@ -274,13 +276,15 @@ async def trigger_deploy(
     env_ids = [row[0] for row in env_ids_result.all()]
     if env_ids:
         running_result = await db.execute(
-            select(sa_func.count()).where(
+            select(Deploy.id)
+            .where(
                 Deploy.env_id.in_(env_ids),
                 Deploy.status.in_(["active", "superseded"]),
                 Deploy.container_vmid.isnot(None),
             )
+            .with_for_update()
         )
-        running_count = running_result.scalar() or 0
+        running_count = len(running_result.all())
         max_running = 3  # Must match MAX_RUNNING_PER_PROJECT in deploys router
         if running_count >= max_running:
             raise ContainerLimitError(
