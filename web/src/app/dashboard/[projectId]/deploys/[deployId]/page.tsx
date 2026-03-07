@@ -233,7 +233,30 @@ export default function DeployDetailPage() {
       {/* Details grid */}
       <div className="grid gap-4 sm:grid-cols-2">
         <DetailCard label="Status">
-          <StatusBadge status={deploy.status} />
+          <div className="flex items-center gap-2">
+            <StatusBadge status={deploy.status} />
+            {deploy.is_production && (
+              <span className="inline-flex items-center rounded bg-green-950/30 px-1.5 py-0.5 text-[10px] font-medium text-green-400">
+                main
+              </span>
+            )}
+          </div>
+        </DetailCard>
+        <DetailCard label="Build">
+          {deploy.commit_sha ? (
+            <div className="flex items-center gap-2">
+              <code className="text-sm font-medium text-zinc-100">
+                {deploy.commit_sha.slice(0, 7)}
+              </code>
+              {deploy.build_id && (
+                <span className="text-xs text-zinc-500" title={deploy.build_id}>
+                  build {deploy.build_id.slice(0, 8)}
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-sm text-zinc-500">—</span>
+          )}
         </DetailCard>
         <DetailCard label="Deploy ID">
           <code className="text-xs text-zinc-300">{deploy.id}</code>
@@ -242,11 +265,6 @@ export default function DeployDetailPage() {
           <span className="text-sm text-zinc-100">
             {environment?.name ?? "—"} ({environment?.type ?? "—"})
           </span>
-        </DetailCard>
-        <DetailCard label="Artifact ID">
-          <code className="text-xs text-zinc-300">
-            {deploy.artifact_id ?? "—"}
-          </code>
         </DetailCard>
         <DetailCard label="Created">
           <span className="text-sm text-zinc-300">

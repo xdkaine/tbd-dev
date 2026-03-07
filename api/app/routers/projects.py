@@ -249,9 +249,10 @@ async def delete_project(
 
     # ── Infrastructure teardown ──────────────────────────────────────
     # Gather every deploy across all environments for this project that
-    # still has infrastructure worth cleaning up.
+    # still has infrastructure worth cleaning up.  Since superseded
+    # deploys now keep their containers alive, they must be included.
     TEARDOWN_STATES = {"queued", "building", "artifact_ready", "provisioning",
-                       "healthy", "active", "stopped", "failed"}
+                       "healthy", "active", "superseded", "stopped", "failed"}
 
     env_ids_q = select(Environment.id).where(Environment.project_id == project_id)
     deploys_q = (
@@ -265,7 +266,7 @@ async def delete_project(
     deploys = deploy_rows.scalars().all()
 
     for deploy in deploys:
-        is_active = deploy.status == "active"
+        is_active = deploy.status in ("active", "superseded")
         try:
             await teardown_deploy(
                 db,

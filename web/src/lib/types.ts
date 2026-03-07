@@ -182,6 +182,8 @@ export interface Deploy {
   id: string;
   env_id: string;
   artifact_id: string | null;
+  build_id: string | null;
+  commit_sha: string | null;
   status: DeployStatus;
   url: string | null;
   created_at: string;

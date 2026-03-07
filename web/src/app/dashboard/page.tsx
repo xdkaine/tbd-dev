@@ -351,10 +351,15 @@ function getStatusTone(status?: DeployStatus) {
       };
     case "stopped":
     case "rolled_back":
-    case "superseded":
       return {
         dot: "bg-zinc-500/70",
         label: "Inactive",
+        pulse: false,
+      };
+    case "superseded":
+      return {
+        dot: "bg-green-400/80 shadow-[0_0_10px_rgba(74,222,128,0.5)]",
+        label: "Active",
         pulse: false,
       };
     case "artifact_ready":

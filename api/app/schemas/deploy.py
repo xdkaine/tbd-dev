@@ -24,6 +24,8 @@ class DeployResponse(BaseModel):
     url: str | None
     created_at: datetime
     promoted_at: datetime | None
+    build_id: uuid.UUID | None = None
+    commit_sha: str | None = None
     is_production: bool = False
     container_ip: str | None = None
     container_vmid: int | None = None

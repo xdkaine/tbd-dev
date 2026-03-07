@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.middleware.auth import CurrentUser, get_current_user, get_current_user_from_token
@@ -456,7 +456,9 @@ async def _run_deploy_executor(
             deploy = (await db.execute(select(Deploy).where(Deploy.id == deploy_id))).scalar_one()
             artifact = (await db.execute(select(Artifact).where(Artifact.id == artifact_id))).scalar_one()
             build = (await db.execute(select(Build).where(Build.id == build_id))).scalar_one()
-            project = (await db.execute(select(Project).where(Project.id == project_id))).scalar_one()
+            project = (await db.execute(
+                select(Project).where(Project.id == project_id).options(selectinload(Project.owner))
+            )).scalar_one()
             environment = (await db.execute(select(Environment).where(Environment.id == env_id))).scalar_one()
 
             ctx = DeployContext(
@@ -497,7 +499,9 @@ async def deploy_from_build(
     check_permission(current_user.role, "deploys.create")
 
     # Verify project
-    proj_result = await db.execute(select(Project).where(Project.id == project_id))
+    proj_result = await db.execute(
+        select(Project).where(Project.id == project_id).options(selectinload(Project.owner))
+    )
     project = proj_result.scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -536,6 +540,11 @@ async def deploy_from_build(
         select(Environment).where(Environment.id == deploy.env_id)
     )
     environment = env_result.scalar_one()
+
+    # Commit now so the deploy row is visible to the background task's
+    # independent DB session.  (Dependency cleanup commits *after*
+    # background tasks run, so without this the row would not exist yet.)
+    await db.commit()
 
     # Schedule the deploy executor as a background task
     background_tasks.add_task(

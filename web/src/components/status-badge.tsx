@@ -11,7 +11,7 @@ const labels: Record<DeployStatus, string> = {
   stopped: "Stopped",
   failed: "Failed",
   rolled_back: "Rolled Back",
-  superseded: "Superseded",
+  superseded: "Active",
 };
 
 export function StatusBadge({ status }: { status: string }) {

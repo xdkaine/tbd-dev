@@ -1095,6 +1095,9 @@ function DeploysTab({
                 Status
               </th>
               <th className="px-4 py-2 text-left font-medium text-zinc-500">
+                Build
+              </th>
+              <th className="px-4 py-2 text-left font-medium text-zinc-500">
                 Environment
               </th>
               <th className="px-4 py-2 text-left font-medium text-zinc-500">
@@ -1124,9 +1127,25 @@ function DeploysTab({
               return (
                 <tr key={d.id} className="hover:bg-zinc-800/50">
                   <td className="px-4 py-2">
-                    <Link href={`/dashboard/${projectId}/deploys/${d.id}`}>
-                      <StatusBadge status={d.status} />
-                    </Link>
+                    <div className="flex items-center gap-1.5">
+                      <Link href={`/dashboard/${projectId}/deploys/${d.id}`}>
+                        <StatusBadge status={d.status} />
+                      </Link>
+                      {d.is_production && (
+                        <span className="inline-flex items-center rounded bg-green-950/30 px-1.5 py-0.5 text-[10px] font-medium text-green-400">
+                          main
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2">
+                    {d.commit_sha ? (
+                      <code className="text-xs text-zinc-300" title={d.commit_sha}>
+                        {d.commit_sha.slice(0, 7)}
+                      </code>
+                    ) : (
+                      <span className="text-zinc-600">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-zinc-300">
                     {envMap[d.env_id]?.name ?? d.env_id.slice(0, 8)}

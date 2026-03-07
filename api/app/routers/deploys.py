@@ -29,6 +29,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.middleware.auth import CurrentUser, get_current_user, get_current_user_from_token
+from app.models.build import Artifact, Build
 from app.models.deploy import Deploy
 from app.models.environment import Environment
 from app.models.project import Project
@@ -89,7 +90,9 @@ async def _get_project_for_deploy(
     env_result = await db.execute(
         select(Environment)
         .where(Environment.id == deploy.env_id)
-        .options(selectinload(Environment.project))
+        .options(
+            selectinload(Environment.project).selectinload(Project.owner)
+        )
     )
     environment = env_result.scalar_one_or_none()
     if environment is None or environment.project is None:
@@ -133,9 +136,16 @@ async def _check_ownership(
 
 
 def _deploy_to_response(deploy: Deploy, production_deploy_id: uuid.UUID | None = None) -> DeployResponse:
-    """Build a DeployResponse with is_production computed."""
+    """Build a DeployResponse with is_production and build info computed."""
     resp = DeployResponse.model_validate(deploy)
     resp.is_production = (deploy.id == production_deploy_id) if production_deploy_id else False
+    # Populate build info from artifact → build chain
+    artifact = getattr(deploy, "artifact", None)
+    if artifact is not None:
+        resp.build_id = artifact.build_id
+        build = getattr(artifact, "build", None)
+        if build is not None:
+            resp.commit_sha = build.commit_sha
     return resp
 
 
@@ -251,7 +261,9 @@ async def list_deploys(
     if not env_ids:
         return DeployListResponse(items=[], total=0)
 
-    query = select(Deploy).where(Deploy.env_id.in_(env_ids))
+    query = select(Deploy).where(Deploy.env_id.in_(env_ids)).options(
+        selectinload(Deploy.artifact).selectinload(Artifact.build)
+    )
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar()
 
@@ -290,7 +302,9 @@ async def create_deploy(
     check_permission(current_user.role, "deploys.create")
 
     # Verify project exists
-    proj_result = await db.execute(select(Project).where(Project.id == project_id))
+    proj_result = await db.execute(
+        select(Project).where(Project.id == project_id).options(selectinload(Project.owner))
+    )
     project = proj_result.scalar_one_or_none()
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")

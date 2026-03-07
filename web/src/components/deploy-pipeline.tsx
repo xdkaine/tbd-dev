@@ -15,7 +15,7 @@ const PIPELINE_STEPS: DeployStatus[] = [
   "active",
 ];
 
-const TERMINAL_STATES: DeployStatus[] = ["failed", "rolled_back", "superseded", "stopped"];
+const TERMINAL_STATES: DeployStatus[] = ["failed", "rolled_back", "stopped"];
 
 const STEP_LABELS: Record<DeployStatus, string> = {
   queued: "Queued",
@@ -26,7 +26,7 @@ const STEP_LABELS: Record<DeployStatus, string> = {
   active: "Active",
   failed: "Failed",
   rolled_back: "Rolled Back",
-  superseded: "Superseded",
+  superseded: "Active",
   stopped: "Stopped",
 };
 
@@ -59,6 +59,8 @@ function getStepState(
 }
 
 export function DeployPipeline({ status }: { status: DeployStatus }) {
+  // Superseded deploys completed the full pipeline — treat as active
+  const effectiveStatus = status === "superseded" ? "active" : status;
   const isTerminal = TERMINAL_STATES.includes(status);
 
   return (
@@ -66,7 +68,7 @@ export function DeployPipeline({ status }: { status: DeployStatus }) {
       {/* Main pipeline */}
       <div className="flex items-center gap-1">
         {PIPELINE_STEPS.map((step, i) => {
-          const state = getStepState(step, status);
+          const state = getStepState(step, effectiveStatus);
           return (
             <div key={step} className="flex items-center">
               {/* Step circle + label */}
@@ -108,7 +110,7 @@ export function DeployPipeline({ status }: { status: DeployStatus }) {
                 <div
                   className={clsx(
                     "mx-1 h-0.5 w-6",
-                    getStepState(PIPELINE_STEPS[i + 1], status) !== "pending"
+                    getStepState(PIPELINE_STEPS[i + 1], effectiveStatus) !== "pending"
                       ? "bg-green-400"
                       : "border-zinc-700 bg-zinc-700",
                   )}
@@ -127,7 +129,6 @@ export function DeployPipeline({ status }: { status: DeployStatus }) {
               "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold",
               status === "failed" && "bg-red-950/30 text-red-400",
               status === "rolled_back" && "bg-orange-950/30 text-orange-400",
-              status === "superseded" && "bg-zinc-800 text-zinc-500",
               status === "stopped" && "bg-amber-950/30 text-amber-400",
             )}
           >
