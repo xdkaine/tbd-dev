@@ -72,6 +72,8 @@ async function request<T>(
 /* ------------------------------------------------------------------ */
 
 import type {
+  ActivityResponse,
+  AdminProjectListResponse,
   AdminStats,
   AdminUser,
   AdminUserListResponse,
@@ -108,11 +110,14 @@ import type {
   Secret,
   SecretCreate,
   SecretListResponse,
+  StudentDetail,
+  StudentListResponse,
   Template,
   TemplateDeployRequest,
   TemplateDeployResponse,
   TemplateListResponse,
   TokenResponse,
+  TrendResponse,
   UserInfo,
   UserSearchResponse,
   Vlan,
@@ -342,6 +347,51 @@ export const api = {
   /* Admin */
   admin: {
     stats: () => request<AdminStats>("/admin/stats"),
+
+    trends: (days = 30) =>
+      request<TrendResponse>(`/admin/stats/trends?days=${days}`),
+
+    activity: (limit = 30) =>
+      request<ActivityResponse>(`/admin/activity?limit=${limit}`),
+
+    projects: (params?: {
+      skip?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+      tag?: string;
+      sort?: string;
+      order?: string;
+    }) => {
+      const qs = new URLSearchParams();
+      if (params?.skip !== undefined) qs.set("skip", String(params.skip));
+      if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+      if (params?.search) qs.set("search", params.search);
+      if (params?.status) qs.set("status", params.status);
+      if (params?.tag) qs.set("tag", params.tag);
+      if (params?.sort) qs.set("sort", params.sort);
+      if (params?.order) qs.set("order", params.order);
+      return request<AdminProjectListResponse>(`/admin/projects?${qs.toString()}`);
+    },
+
+    students: {
+      list: (params?: {
+        skip?: number;
+        limit?: number;
+        search?: string;
+        sort?: string;
+        order?: string;
+      }) => {
+        const qs = new URLSearchParams();
+        if (params?.skip !== undefined) qs.set("skip", String(params.skip));
+        if (params?.limit !== undefined) qs.set("limit", String(params.limit));
+        if (params?.search) qs.set("search", params.search);
+        if (params?.sort) qs.set("sort", params.sort);
+        if (params?.order) qs.set("order", params.order);
+        return request<StudentListResponse>(`/admin/students?${qs.toString()}`);
+      },
+      get: (userId: string) => request<StudentDetail>(`/admin/students/${userId}`),
+    },
 
     /* Quotas */
     quotas: {

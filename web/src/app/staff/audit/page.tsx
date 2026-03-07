@@ -1,0 +1,176 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
+import type { AuditLogEntry } from "@/lib/types";
+
+export default function StaffAuditPage() {
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [filterAction, setFilterAction] = useState("");
+  const [filterTarget, setFilterTarget] = useState("");
+  const limit = 25;
+
+  const fetchAudit = useCallback(async () => {
+    setLoading(true);
+    try {
+      setError(null);
+      const res = await api.audit.list({
+        skip: page * limit,
+        limit,
+        action: filterAction || undefined,
+        target_type: filterTarget || undefined,
+      });
+      setEntries(res.items);
+      setTotal(res.total);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load audit log",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [page, filterAction, filterTarget]);
+
+  useEffect(() => {
+    fetchAudit();
+  }, [fetchAudit]);
+
+  const totalPages = Math.ceil(total / limit);
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-zinc-100">Audit Log</h1>
+        <p className="text-sm text-zinc-500">
+          Platform activity trail &mdash; {total} total entries
+        </p>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4 flex gap-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-300">
+            Action
+          </label>
+          <input
+            type="text"
+            value={filterAction}
+            onChange={(e) => {
+              setFilterAction(e.target.value);
+              setPage(0);
+            }}
+            className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
+            placeholder="e.g. deploy.create"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-300">
+            Target type
+          </label>
+          <input
+            type="text"
+            value={filterTarget}
+            onChange={(e) => {
+              setFilterTarget(e.target.value);
+              setPage(0);
+            }}
+            className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200 placeholder-zinc-600 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/50"
+            placeholder="e.g. project"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <p className="text-sm text-zinc-500">Loading...</p>
+      ) : error ? (
+        <p className="text-sm text-red-400">{error}</p>
+      ) : entries.length === 0 ? (
+        <p className="py-8 text-center text-sm text-zinc-500">
+          No audit entries found.
+        </p>
+      ) : (
+        <>
+          <div className="overflow-hidden rounded-lg border border-zinc-800">
+            <table className="min-w-full divide-y divide-zinc-800 text-sm">
+              <thead className="bg-zinc-900/50">
+                <tr>
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
+                    Time
+                  </th>
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
+                    Action
+                  </th>
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
+                    Target
+                  </th>
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
+                    Actor
+                  </th>
+                  <th className="px-4 py-2 text-left font-medium text-zinc-400">
+                    Payload
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {entries.map((e) => (
+                  <tr key={e.id} className="hover:bg-zinc-800/50">
+                    <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-500">
+                      {formatDate(e.created_at)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="inline-flex rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-zinc-300">
+                        {e.action}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-xs text-zinc-300">
+                      {e.target_type}:{e.target_id.slice(0, 8)}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-zinc-500">
+                      {e.actor_user_id
+                        ? e.actor_user_id.slice(0, 8)
+                        : "system"}
+                    </td>
+                    <td className="max-w-[300px] truncate px-4 py-2 font-mono text-xs text-zinc-500">
+                      {e.payload ?? "\u2014"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <p className="text-xs text-zinc-500">
+              Page {page + 1} of {totalPages}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() =>
+                  setPage((p) => Math.min(totalPages - 1, p + 1))
+                }
+                disabled={page >= totalPages - 1}
+                className="rounded-lg border border-zinc-700 px-3 py-1 text-xs text-zinc-400 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

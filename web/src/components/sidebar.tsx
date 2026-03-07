@@ -6,16 +6,9 @@ import { useAuth } from "@/contexts/auth";
 import { useEffect } from "react";
 import clsx from "clsx";
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Projects", roles: ["JAS_Developer", "JAS-Staff", "JAS-Faculty"] },
-  { href: "/settings", label: "Settings", roles: ["JAS_Developer", "JAS-Staff", "JAS-Faculty"] },
-  { href: "/admin", label: "Admin", roles: ["JAS-Staff", "JAS-Faculty"], exact: true, section: "admin" },
-  { href: "/admin/users", label: "Users", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
-  { href: "/admin/quotas", label: "Quotas", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
-  { href: "/admin/network-policies", label: "Network Policies", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
-  { href: "/admin/vlans", label: "VLANs", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
-  { href: "/admin/audit", label: "Audit Log", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
-];
+/* ------------------------------------------------------------------ */
+/*  Navigation item definitions — one set per role                    */
+/* ------------------------------------------------------------------ */
 
 interface NavItem {
   href: string;
@@ -25,6 +18,40 @@ interface NavItem {
   section?: string;
   indent?: boolean;
 }
+
+const NAV_ITEMS: NavItem[] = [
+  // ---- Developer items ----
+  { href: "/dashboard", label: "Projects", roles: ["JAS_Developer", "JAS-Staff", "JAS-Faculty"] },
+  { href: "/settings", label: "Settings", roles: ["JAS_Developer", "JAS-Staff", "JAS-Faculty"] },
+
+  // ---- Staff section ----
+  { href: "/staff", label: "Overview", roles: ["JAS-Staff"], exact: true, section: "staff" },
+  { href: "/staff/projects", label: "All Projects", roles: ["JAS-Staff"], indent: true },
+  { href: "/staff/students", label: "Students", roles: ["JAS-Staff"], indent: true },
+  { href: "/staff/tags", label: "Tags", roles: ["JAS-Staff"], indent: true },
+  { href: "/staff/quotas", label: "Quotas", roles: ["JAS-Staff"], indent: true },
+  { href: "/staff/vlans", label: "VLANs", roles: ["JAS-Staff"], indent: true },
+  { href: "/staff/audit", label: "Audit Log", roles: ["JAS-Staff"], indent: true },
+
+  // ---- Faculty section ----
+  { href: "/faculty", label: "Overview", roles: ["JAS-Faculty"], exact: true, section: "faculty" },
+  { href: "/faculty/projects", label: "All Projects", roles: ["JAS-Faculty"], indent: true },
+  { href: "/faculty/students", label: "Students", roles: ["JAS-Faculty"], indent: true },
+  { href: "/faculty/tags", label: "Tags", roles: ["JAS-Faculty"], indent: true },
+  { href: "/faculty/users", label: "Users", roles: ["JAS-Faculty"], indent: true, section: "management" },
+  { href: "/faculty/quotas", label: "Quotas", roles: ["JAS-Faculty"], indent: true },
+  { href: "/faculty/network-policies", label: "Network Policies", roles: ["JAS-Faculty"], indent: true },
+  { href: "/faculty/vlans", label: "VLANs", roles: ["JAS-Faculty"], indent: true },
+  { href: "/faculty/audit", label: "Audit Log", roles: ["JAS-Faculty"], indent: true },
+
+  // ---- Legacy admin section (kept active, accessible to both) ----
+  { href: "/admin", label: "Admin", roles: ["JAS-Staff", "JAS-Faculty"], exact: true, section: "admin" },
+  { href: "/admin/users", label: "Users", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+  { href: "/admin/quotas", label: "Quotas", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+  { href: "/admin/network-policies", label: "Network Policies", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+  { href: "/admin/vlans", label: "VLANs", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+  { href: "/admin/audit", label: "Audit Log", roles: ["JAS-Staff", "JAS-Faculty"], indent: true },
+];
 
 interface SidebarProps {
   /** Mobile-only: whether the sidebar drawer is open */
@@ -69,10 +96,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
           return (
             <div key={item.href}>
-              {item.section === "admin" && (
+              {item.section && (
                 <div className="mb-1 mt-4 border-t border-zinc-800 pt-3">
                   <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
-                    Admin
+                    {item.section === "staff" ? "Staff" :
+                     item.section === "faculty" ? "Faculty" :
+                     item.section === "management" ? "Management" :
+                     "Admin"}
                   </p>
                 </div>
               )}

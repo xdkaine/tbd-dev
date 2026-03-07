@@ -394,6 +394,104 @@ export interface AdminStats {
   total_network_policies: number;
 }
 
+/* Admin trends (time-series) */
+export interface TrendPoint {
+  date: string;
+  deploys: number;
+  builds: number;
+  failed_deploys: number;
+  failed_builds: number;
+}
+
+export interface TrendResponse {
+  points: TrendPoint[];
+  period_days: number;
+}
+
+/* Admin activity feed */
+export interface ActivityEvent {
+  id: string;
+  type: string;
+  timestamp: string;
+  actor_name: string | null;
+  actor_username: string | null;
+  project_name: string | null;
+  project_id: string | null;
+  status: string | null;
+  detail: string | null;
+}
+
+export interface ActivityResponse {
+  items: ActivityEvent[];
+  total: number;
+}
+
+/* Admin all-projects listing */
+export interface AdminProjectItem {
+  id: string;
+  name: string;
+  slug: string;
+  owner_id: string;
+  owner_username: string;
+  owner_display_name: string;
+  framework: string | null;
+  repo_url: string | null;
+  repo_full_name: string | null;
+  production_url: string | null;
+  deploy_locked: boolean;
+  expires_at: string | null;
+  created_at: string;
+  latest_deploy_status: string | null;
+  total_deploys: number;
+  total_builds: number;
+  member_count: number;
+  tags: string[];
+}
+
+export interface AdminProjectListResponse {
+  items: AdminProjectItem[];
+  total: number;
+}
+
+/* Student (developer) summaries */
+export interface StudentSummary {
+  id: string;
+  username: string;
+  display_name: string;
+  email: string;
+  role: string;
+  github_username: string | null;
+  created_at: string;
+  project_count: number;
+  total_builds: number;
+  total_deploys: number;
+  active_deploys: number;
+  last_activity: string | null;
+}
+
+export interface StudentListResponse {
+  items: StudentSummary[];
+  total: number;
+}
+
+/* Student detail */
+export interface StudentDetail {
+  id: string;
+  username: string;
+  display_name: string;
+  email: string;
+  role: string;
+  github_username: string | null;
+  created_at: string;
+  projects: AdminProjectItem[];
+  total_builds: number;
+  total_deploys: number;
+  active_deploys: number;
+  failed_deploys: number;
+  success_rate: number;
+  last_activity: string | null;
+}
+
 /* Templates */
 export interface Template {
   id: string;
