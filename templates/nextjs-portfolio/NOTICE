@@ -1,0 +1,16 @@
+NOTICE — Attribution
+====================
+
+This template is adapted from Vercel's open-source examples:
+https://github.com/vercel/vercel/tree/main/examples
+
+Vercel's examples are licensed under the Apache License 2.0.
+https://github.com/vercel/vercel/blob/main/LICENSE
+
+Modifications for TBD:
+- Added Dockerfile for container-based deployment
+- Added /health endpoint for platform health checks
+- Configured $PORT environment variable binding
+- Adapted for TBD's Proxmox/LXC build and deploy pipeline
+- Created portfolio/CV template with sections for hero, about, skills,
+  projects, experience, education, and contact

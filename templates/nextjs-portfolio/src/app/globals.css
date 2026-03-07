@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ─────────────────────────────────────── */
+:root {
+  --color-bg: #09090b;
+  --color-surface: #18181b;
+  --color-border: #27272a;
+  --color-text: #f4f4f5;
+  --color-muted: #a1a1aa;
+  --color-accent: #00d68f;
+  --color-accent-hover: #00b876;
+}
+
+/* ── Base ────────────────────────────────────────────────── */
+body {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* ── Smooth scrolling ─────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── Section stagger animation delays ─────────────────── */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+
+/* ── Subtle glow on accent elements ───────────────────── */
+.glow-accent {
+  box-shadow: 0 0 20px rgba(0, 214, 143, 0.15);
+}
+
+/* ── Card hover lift ──────────────────────────────────── */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
