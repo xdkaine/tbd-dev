@@ -10,7 +10,7 @@ import { DeployPipeline } from "@/components/deploy-pipeline";
 import { useLogStream } from "@/hooks/useLogStream";
 import type { Deploy, DeployStatus, Environment, Project } from "@/lib/types";
 
-const TERMINAL_STATUSES = ["active", "failed", "rolled_back", "superseded"];
+const TERMINAL_STATUSES = ["active", "failed", "rolled_back", "stopped", "superseded"];
 
 export default function DeployDetailPage() {
   const params = useParams();
@@ -171,12 +171,17 @@ export default function DeployDetailPage() {
                 >
                   {deploy.url.replace("http://", "")}
                 </a>
+                {deploy.is_production && (
+                  <span className="ml-1.5 inline-flex items-center rounded bg-green-950/30 px-1.5 py-0.5 text-xs text-green-400">
+                    production
+                  </span>
+                )}
               </>
             )}
           </p>
         </div>
 
-        {(deploy.status === "active" || deploy.status === "healthy") && (
+        {deploy.is_production && (
           <button
             onClick={handleRollback}
             disabled={rolling}

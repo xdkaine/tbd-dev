@@ -27,6 +27,11 @@ from app.utils.dns import deploy_url
 logger = logging.getLogger(__name__)
 
 
+class ContainerLimitError(ValueError):
+    """Raised when a project has reached its max running container limit."""
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Build lifecycle
 # ---------------------------------------------------------------------------
@@ -260,6 +265,30 @@ async def trigger_deploy(
         )
         raise ValueError(str(e)) from e
 
+    # Check per-project container limit (max 3 running deploys)
+    from sqlalchemy import func as sa_func
+
+    env_ids_result = await db.execute(
+        select(Environment.id).where(Environment.project_id == project.id)
+    )
+    env_ids = [row[0] for row in env_ids_result.all()]
+    if env_ids:
+        running_result = await db.execute(
+            select(sa_func.count()).where(
+                Deploy.env_id.in_(env_ids),
+                Deploy.status.in_(["active", "superseded"]),
+                Deploy.container_vmid.isnot(None),
+            )
+        )
+        running_count = running_result.scalar() or 0
+        max_running = 3  # Must match MAX_RUNNING_PER_PROJECT in deploys router
+        if running_count >= max_running:
+            raise ContainerLimitError(
+                f"Container limit reached: {running_count}/{max_running} running "
+                f"deploys for project '{project.slug}'. Stop or destroy an existing "
+                f"deploy before starting a new one."
+            )
+
     # Resolve environment
     env_result = await db.execute(
         select(Environment).where(
@@ -406,37 +435,25 @@ async def transition_deploy(
     # Side effects
     if new_status == "active":
         deploy.promoted_at = datetime.now(timezone.utc)
-        # Mark previous active deploys as superseded
+        # Mark previous active deploys as superseded (status only — their
+        # containers and per-deploy URLs stay alive so they remain
+        # accessible at their per-deploy URL).
         superseded_ids = await mark_superseded(db, deploy.env_id, deploy.id)
 
-        # Trigger teardown for each superseded deploy (destroy container +
-        # remove per-deploy Nginx config).  mark_superseded() bypasses
-        # transition_deploy() to avoid recursion, so the teardown hook
-        # in the "superseded" branch below wouldn't fire for those deploys.
         if superseded_ids:
-            from app.services.deploy_teardown import teardown_deploy
-            for sid in superseded_ids:
-                try:
-                    await teardown_deploy(
-                        db, sid,
-                        remove_production_route=False,
-                        destroy_container=True,
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "Non-fatal: teardown for superseded deploy %s failed: %s",
-                        sid, e,
-                    )
+            logger.info(
+                "Superseded %d deploys in env %s (containers kept alive)",
+                len(superseded_ids), deploy.env_id,
+            )
 
     if new_status in ("active", "failed", "rolled_back", "superseded", "stopped"):
         # Terminal or stable state — free a queue slot
         await on_deploy_completed(db, deploy.env_id)
 
-    # Infrastructure cleanup for terminal states that deactivate a deploy.
-    # When a deploy is superseded or rolled back, tear down its Nginx config
-    # and LXC container so resources are freed. This runs async fire-and-forget
-    # so it doesn't block the state transition.
-    if new_status in ("superseded", "rolled_back"):
+    # Infrastructure cleanup for rolled-back deploys only.
+    # Superseded deploys keep their containers and per-deploy URLs alive
+    # so they remain accessible at their unique per-deploy URLs.
+    if new_status == "rolled_back":
         try:
             from app.services.deploy_teardown import teardown_deploy
             await teardown_deploy(

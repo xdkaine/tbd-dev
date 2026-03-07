@@ -8,6 +8,8 @@
 #   ./deploy.sh --rebuild    Force rebuild all images (no cache)
 #   ./deploy.sh --down       Tear down the stack
 #   ./deploy.sh --status     Show service status and health
+#   ./deploy.sh --cleanup    Prune unused Docker images, build cache, and volumes
+#   ./deploy.sh --install    Install systemd service for auto-start on reboot
 #
 set -euo pipefail
 
@@ -29,6 +31,8 @@ NO_PROMPT=false
 REBUILD=false
 DOWN=false
 STATUS=false
+CLEANUP=false
+INSTALL_SERVICE=false
 
 for arg in "$@"; do
   case $arg in
@@ -36,8 +40,10 @@ for arg in "$@"; do
     --rebuild)   REBUILD=true ;;
     --down)      DOWN=true ;;
     --status)    STATUS=true ;;
+    --cleanup)   CLEANUP=true ;;
+    --install)   INSTALL_SERVICE=true ;;
     --help|-h)
-      echo "Usage: ./deploy.sh [--no-prompt] [--rebuild] [--down] [--status]"
+      echo "Usage: ./deploy.sh [--no-prompt] [--rebuild] [--down] [--status] [--cleanup] [--install]"
       exit 0
       ;;
     *) echo "Unknown flag: $arg"; exit 1 ;;
@@ -211,6 +217,129 @@ if [ "$STATUS" = true ]; then
   else
     echo -e "  Grafana:  ${RED}HTTP $grafana_health${NC}"
   fi
+
+  exit 0
+fi
+
+# ---------- Handle --cleanup ----------
+
+if [ "$CLEANUP" = true ]; then
+  header "Docker Cleanup"
+
+  # Show current disk usage
+  log "Current Docker disk usage:"
+  docker system df
+  echo ""
+
+  # Prune dangling images (untagged intermediate layers)
+  log "Removing dangling images..."
+  DANGLING=$(docker image prune -f 2>/dev/null | tail -1)
+  log "  $DANGLING"
+
+  # Prune build cache
+  log "Removing build cache..."
+  BUILDCACHE=$(docker builder prune -f 2>/dev/null | tail -1)
+  log "  $BUILDCACHE"
+
+  # Remove stopped containers (excluding our stack)
+  log "Removing stopped containers..."
+  STOPPED=$(docker container prune -f 2>/dev/null | tail -1)
+  log "  $STOPPED"
+
+  # Remove images not used by any container (older than 24h to avoid race with active builds)
+  log "Removing unused images (older than 24h)..."
+  UNUSED=$(docker image prune -a -f --filter "until=24h" 2>/dev/null | tail -1)
+  log "  $UNUSED"
+
+  # Remove anonymous volumes not used by any container
+  log "Removing unused anonymous volumes..."
+  VOLS=$(docker volume prune -f 2>/dev/null | tail -1)
+  log "  $VOLS"
+
+  echo ""
+  log "Docker disk usage after cleanup:"
+  docker system df
+
+  exit 0
+fi
+
+# ---------- Handle --install ----------
+
+if [ "$INSTALL_SERVICE" = true ]; then
+  header "Installing TBD Platform systemd service"
+
+  if [ "$(id -u)" != "0" ]; then
+    err "Must run as root to install systemd service"
+    exit 1
+  fi
+
+  # Detect the compose command for the service file
+  if docker compose version &>/dev/null; then
+    SVC_COMPOSE_CMD="docker compose -f $INFRA_DIR/docker-compose.yml --env-file $ENV_FILE"
+  elif command_exists docker-compose; then
+    SVC_COMPOSE_CMD="docker-compose --project-directory $INFRA_DIR -f $INFRA_DIR/docker-compose.yml"
+  else
+    err "docker compose is required but not found."
+    exit 1
+  fi
+
+  cat > /etc/systemd/system/tbd-platform.service <<SVCEOF
+[Unit]
+Description=TBD Platform (Docker Compose)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=$INFRA_DIR
+ExecStart=$SVC_COMPOSE_CMD up -d
+ExecStop=$SVC_COMPOSE_CMD down
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+  # Install cleanup timer (runs daily at 03:00)
+  cat > /etc/systemd/system/tbd-cleanup.service <<SVCEOF
+[Unit]
+Description=TBD Platform Docker cleanup
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker image prune -a -f --filter "until=24h"
+ExecStart=/usr/bin/docker builder prune -f
+ExecStart=/usr/bin/docker container prune -f
+ExecStart=/usr/bin/docker volume prune -f
+SVCEOF
+
+  cat > /etc/systemd/system/tbd-cleanup.timer <<SVCEOF
+[Unit]
+Description=Daily Docker cleanup for TBD Platform
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+SVCEOF
+
+  systemctl daemon-reload
+  systemctl enable docker.service
+  systemctl enable tbd-platform.service
+  systemctl enable tbd-cleanup.timer
+  systemctl start tbd-cleanup.timer
+
+  log "Installed and enabled:"
+  log "  tbd-platform.service  — auto-starts all services on boot"
+  log "  tbd-cleanup.timer     — daily Docker cleanup at 03:00"
+  echo ""
+  log "Verify with:"
+  log "  systemctl status tbd-platform.service"
+  log "  systemctl list-timers tbd-cleanup.timer"
 
   exit 0
 fi
@@ -488,6 +617,11 @@ if [ "$REBUILD" = true ]; then
     exit 1
   fi
   log "Parallel builds complete"
+
+  # Clean up dangling images from the rebuild
+  log "Pruning old build artifacts..."
+  docker image prune -f >/dev/null 2>&1 || true
+  docker builder prune -f --filter "until=24h" >/dev/null 2>&1 || true
 fi
 
 $COMPOSE_BASE up -d --build
@@ -671,6 +805,8 @@ echo "    Status:       ./deploy.sh --status"
 echo "    Logs:         docker compose -f infra/docker-compose.yml logs -f [service]"
 echo "    Stop:         ./deploy.sh --down"
 echo "    Rebuild:      ./deploy.sh --rebuild"
+echo "    Cleanup:      ./deploy.sh --cleanup"
+echo "    Auto-start:   ./deploy.sh --install   (systemd service + daily cleanup timer)"
 echo ""
 echo "  Next steps:"
 echo "    1. Configure DNS:  *.*.${DEPLOY_SUFFIX} -> this server's IP"

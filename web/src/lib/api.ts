@@ -251,6 +251,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ reason }),
       }),
+    promote: (deployId: string) =>
+      request<Deploy>(`/deploys/${deployId}/promote`, {
+        method: "POST",
+      }),
     destroy: (deployId: string) =>
       request<Deploy>(`/deploys/${deployId}`, {
         method: "DELETE",

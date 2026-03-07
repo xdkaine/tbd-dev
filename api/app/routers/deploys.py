@@ -13,7 +13,7 @@ Deploy rework additions:
 - Rollback: finds last successful deploy for env, redeploys; if none, tears down
 - Destroy: DELETE /deploys/{id} — full infrastructure teardown
 - Start/Stop: POST /deploys/{id}/start, POST /deploys/{id}/stop
-- Container limit: max 3 running containers per project, auto-stops excess
+- Container limit: max 3 running containers per project, returns 409 if exceeded
 """
 
 import asyncio
@@ -48,8 +48,8 @@ from app.utils.dns import deploy_url
 
 router = APIRouter(tags=["deploys"])
 
-# Max running (active or stopped-but-startable) containers per project.
-# Users can start/stop within this limit — starting one may auto-stop another.
+# Max running (active or superseded-with-container) deploys per project.
+# Users must stop one before deploying if at the limit.
 MAX_RUNNING_PER_PROJECT = 3
 
 
@@ -132,86 +132,89 @@ async def _check_ownership(
     )
 
 
-async def _enforce_container_limit(
-    db: AsyncSession,
-    project_id: uuid.UUID,
-    exclude_deploy_id: uuid.UUID | None = None,
-) -> list[uuid.UUID]:
-    """Ensure at most MAX_RUNNING_PER_PROJECT containers are running for a project.
+def _deploy_to_response(deploy: Deploy, production_deploy_id: uuid.UUID | None = None) -> DeployResponse:
+    """Build a DeployResponse with is_production computed."""
+    resp = DeployResponse.model_validate(deploy)
+    resp.is_production = (deploy.id == production_deploy_id) if production_deploy_id else False
+    return resp
 
-    If there are already MAX_RUNNING_PER_PROJECT active containers and we need
-    to start another one, this stops the oldest active containers to make room.
 
-    Args:
-        project_id: Project UUID.
-        exclude_deploy_id: Deploy to exclude from stopping (the one being started).
+async def _get_production_deploy_id(
+    db: AsyncSession, project: Project,
+) -> uuid.UUID | None:
+    """Get the deploy ID that currently holds the production URL for a project.
 
-    Returns:
-        List of deploy IDs that were stopped to make room.
+    The production deploy is the most recently promoted active deploy in the
+    project's default (production) environment.
     """
-    # Find all environments for this project
+    env_result = await db.execute(
+        select(Environment.id).where(Environment.project_id == project.id)
+    )
+    env_ids = [row[0] for row in env_result.all()]
+    if not env_ids:
+        return None
+
+    result = await db.execute(
+        select(Deploy.id)
+        .where(
+            Deploy.env_id.in_(env_ids),
+            Deploy.status == "active",
+        )
+        .order_by(Deploy.promoted_at.desc().nullslast())
+        .limit(1)
+    )
+    row = result.scalar_one_or_none()
+    return row
+
+
+async def _count_running_deploys(
+    db: AsyncSession, project_id: uuid.UUID,
+) -> int:
+    """Count deploys with a running container (active or superseded with container)."""
     env_result = await db.execute(
         select(Environment.id).where(Environment.project_id == project_id)
     )
     env_ids = [row[0] for row in env_result.all()]
     if not env_ids:
-        return []
+        return 0
 
-    # Find all active (running) deploys for this project, oldest first
-    active_query = (
-        select(Deploy)
-        .where(
+    result = await db.execute(
+        select(func.count()).where(
             Deploy.env_id.in_(env_ids),
-            Deploy.status == "active",
+            Deploy.status.in_(["active", "superseded"]),
+            Deploy.container_vmid.isnot(None),
         )
-        .order_by(Deploy.promoted_at.asc().nullslast(), Deploy.created_at.asc())
     )
-    result = await db.execute(active_query)
-    active_deploys = list(result.scalars().all())
+    return result.scalar() or 0
 
-    # Filter out the deploy we're about to start
-    if exclude_deploy_id:
-        candidates = [d for d in active_deploys if d.id != exclude_deploy_id]
-    else:
-        candidates = active_deploys
 
-    # How many need to be stopped?
-    # After starting the new one, total running = len(active_deploys) + (1 if exclude_deploy_id else 0)
-    total_after = len(active_deploys) + (1 if exclude_deploy_id and exclude_deploy_id not in [d.id for d in active_deploys] else 0)
-    excess = total_after - MAX_RUNNING_PER_PROJECT
-    if excess <= 0:
-        return []
+async def _check_container_limit(
+    db: AsyncSession,
+    project_id: uuid.UUID,
+    exclude_deploy_id: uuid.UUID | None = None,
+) -> None:
+    """Raise HTTP 409 if the project already has MAX_RUNNING_PER_PROJECT containers.
 
-    # Stop the oldest excess containers
-    stopped_ids: list[uuid.UUID] = []
-    from app.services.deploy_teardown import stop_lxc_container, _find_lxc_for_deploy
-    from app.services.proxmox_adapter import get_proxmox_adapter
+    Args:
+        project_id: Project UUID.
+        exclude_deploy_id: Deploy to exclude from the count (e.g. a stopped
+            deploy that is about to be restarted — it's already counted if
+            it has a container_vmid, but since it's stopped it won't be in
+            the active/superseded query).
 
-    adapter = get_proxmox_adapter()
-
-    for deploy in candidates[:excess]:
-        # Get hostname for this deploy
-        env_res = await db.execute(
-            select(Environment)
-            .where(Environment.id == deploy.env_id)
-            .options(selectinload(Environment.project))
+    Raises:
+        HTTPException(409) when the limit would be exceeded.
+    """
+    running = await _count_running_deploys(db, project_id)
+    if running >= MAX_RUNNING_PER_PROJECT:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Container limit reached: {running}/{MAX_RUNNING_PER_PROJECT} "
+                f"running deploys for this project. Stop or destroy an existing "
+                f"deploy before starting a new one."
+            ),
         )
-        env = env_res.scalar_one_or_none()
-        if not env or not env.project:
-            continue
-
-        hostname = f"{env.project.slug}-{env.name}"
-        lxc = await _find_lxc_for_deploy(adapter, hostname)
-        if lxc:
-            node, vmid = lxc
-            await stop_lxc_container(adapter, node, vmid)
-
-        # Transition to stopped
-        deploy.status = "stopped"
-        await db.flush()
-        stopped_ids.append(deploy.id)
-
-    return stopped_ids
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +260,10 @@ async def list_deploys(
     )
     deploys = result.scalars().all()
 
+    prod_deploy_id = await _get_production_deploy_id(db, project)
+
     return DeployListResponse(
-        items=[DeployResponse.model_validate(d) for d in deploys],
+        items=[_deploy_to_response(d, prod_deploy_id) for d in deploys],
         total=total,
     )
 
@@ -395,11 +400,14 @@ async def rollback_deploy(
 ):
     """Rollback a deployment.
 
-    Finds the last successful deploy for the same environment and redeploys
-    that artifact. If no previous successful deploy exists, tears down all
-    infrastructure (destroys LXC, removes Nginx config, clears URL).
+    Finds the previous superseded/stopped deploy for the same environment
+    that still has a running container, and re-promotes it to the production
+    URL. No new build or deploy is created.
 
-    The current deploy is transitioned to 'rolled_back'.
+    If no previous deploy with a live container exists, performs a full
+    teardown and removes the production URL.
+
+    The current deploy is transitioned to 'superseded' (container stays alive).
     """
     check_permission(current_user.role, "deploys.rollback")
 
@@ -413,111 +421,79 @@ async def rollback_deploy(
     project = await _get_project_for_deploy(db, deploy)
     await _check_ownership(db, current_user, project, "deploys.rollback")
 
-    # Must be in a state that can transition to rolled_back
-    if not deploy.can_transition_to("rolled_back"):
+    # Must be active to rollback
+    if deploy.status != "active":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot rollback deploy in state '{deploy.status}'",
+            detail=f"Cannot rollback deploy in state '{deploy.status}'. Only active deploys can be rolled back.",
         )
 
     reason = body.reason if body and body.reason else "Manual rollback"
 
-    # Find the previous successful deploy in the same environment
-    # (one that was active and has an artifact we can redeploy)
+    # Find the previous deploy that still has a live container
+    # (superseded or stopped, with container_vmid set)
     prev_result = await db.execute(
         select(Deploy)
         .where(
             Deploy.env_id == deploy.env_id,
             Deploy.id != deploy_id,
-            Deploy.artifact_id.isnot(None),
-            Deploy.status.in_(["active", "superseded", "stopped"]),
+            Deploy.status.in_(["superseded", "stopped"]),
+            Deploy.container_vmid.isnot(None),
+            Deploy.container_ip.isnot(None),
         )
         .order_by(Deploy.promoted_at.desc().nullslast(), Deploy.created_at.desc())
         .limit(1)
     )
     previous_deploy = prev_result.scalar_one_or_none()
 
-    # Transition current deploy to rolled_back
-    try:
-        deploy = await transition_deploy(
-            db,
-            deploy_id=deploy_id,
-            new_status="rolled_back",
-            description=reason,
-        )
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(e),
-        )
+    # Mark current deploy as superseded (keep container alive)
+    deploy.status = "superseded"
+    await db.flush()
 
-    if previous_deploy and previous_deploy.artifact_id:
-        # Redeploy the previous artifact
-        from app.models.build import Artifact, Build
+    if previous_deploy:
+        # Re-promote the previous deploy
+        previous_deploy.status = "active"
+        previous_deploy.promoted_at = datetime.now(timezone.utc)
+        await db.flush()
 
-        art_result = await db.execute(
-            select(Artifact).where(Artifact.id == previous_deploy.artifact_id)
-        )
-        artifact = art_result.scalar_one_or_none()
+        # Switch production Nginx config to the previous deploy's container
+        from app.services.dns_routing import register_production_routing
+        from app.utils.dns import production_url as make_production_url
+        owner_username = project.owner.username if project.owner else "unknown"
+        backend_port = previous_deploy.container_port or 3000
 
-        if artifact:
-            build_result = await db.execute(
-                select(Build).where(Build.id == artifact.build_id)
+        try:
+            await register_production_routing(
+                project_slug=project.slug,
+                owner_username=owner_username,
+                backend_ip=previous_deploy.container_ip,
+                backend_port=backend_port,
+                deploy_id=str(previous_deploy.id),
             )
-            build = build_result.scalar_one_or_none()
+            project.production_url = make_production_url(project.slug, owner_username)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to switch production routing during rollback: %s", e,
+            )
 
-            if build:
-                env_result = await db.execute(
-                    select(Environment).where(Environment.id == deploy.env_id)
-                )
-                environment = env_result.scalar_one_or_none()
+        await write_audit_log(
+            db,
+            actor_user_id=current_user.id,
+            action="deploy.rollback.repromote",
+            target_type="deploy",
+            target_id=str(deploy.id),
+            payload={
+                "reason": reason,
+                "repromoted_deploy_id": str(previous_deploy.id),
+            },
+        )
+        await db.commit()
+        return DeployResponse.model_validate(deploy)
 
-                if environment:
-                    try:
-                        new_deploy = await trigger_deploy(
-                            db,
-                            project=project,
-                            build=build,
-                            artifact=artifact,
-                            env_name=environment.name,
-                            actor_user_id=current_user.id,
-                        )
-
-                        await write_audit_log(
-                            db,
-                            actor_user_id=current_user.id,
-                            action="deploy.rollback.redeploy",
-                            target_type="deploy",
-                            target_id=str(deploy.id),
-                            payload={
-                                "reason": reason,
-                                "previous_deploy_id": str(previous_deploy.id),
-                                "new_deploy_id": str(new_deploy.id),
-                            },
-                        )
-                        await db.commit()
-                        return DeployResponse.model_validate(deploy)
-                    except Exception as e:
-                        # If redeployment fails, still complete the rollback
-                        await write_audit_log(
-                            db,
-                            actor_user_id=current_user.id,
-                            action="deploy.rollback.redeploy_failed",
-                            target_type="deploy",
-                            target_id=str(deploy.id),
-                            payload={"reason": reason, "error": str(e)[:200]},
-                        )
-
-    # No previous deploy found (or redeploy failed) — full teardown
-    from app.services.deploy_teardown import teardown_deploy
-    await teardown_deploy(
-        db,
-        deploy_id,
-        remove_production_route=True,  # no replacement, remove production URL
-        destroy_container=True,
-    )
-
-    # Clear production URL on project since there's no active deploy
+    # No previous deploy with live container — remove production URL
+    from app.services.dns_routing import unregister_production_routing
+    await unregister_production_routing(project.slug)
     project.production_url = None
 
     await write_audit_log(
@@ -526,11 +502,116 @@ async def rollback_deploy(
         action="deploy.rollback.teardown",
         target_type="deploy",
         target_id=str(deploy.id),
-        payload={"reason": reason, "action": "full_teardown"},
+        payload={"reason": reason, "action": "no_previous_deploy"},
     )
     await db.commit()
 
     return DeployResponse.model_validate(deploy)
+
+
+# ---------------------------------------------------------------------------
+# Promote (set as production URL)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/deploys/{deploy_id}/promote", response_model=DeployResponse)
+async def promote_deploy(
+    deploy_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Promote a deploy to the production URL.
+
+    Switches the production Nginx config to point to this deploy's container.
+    The previously active deploy is marked 'superseded' but its container
+    and per-deploy URL remain alive.
+
+    Can be called on:
+    - 'active' deploys that aren't already the production deploy
+    - 'superseded' deploys (re-promote a previous deploy)
+    """
+    check_permission(current_user.role, "deploys.create")
+
+    result = await db.execute(
+        select(Deploy).where(Deploy.id == deploy_id).with_for_update()
+    )
+    deploy = result.scalar_one_or_none()
+    if deploy is None:
+        raise HTTPException(status_code=404, detail="Deploy not found")
+
+    project = await _get_project_for_deploy(db, deploy)
+    await _check_ownership(db, current_user, project, "deploys.create")
+
+    # Must be active or superseded (has a running container)
+    if deploy.status not in ("active", "superseded"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot promote deploy in state '{deploy.status}'. "
+                   f"Only active or superseded deploys can be promoted.",
+        )
+
+    # Must have a container running
+    if not deploy.container_ip or not deploy.container_vmid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Deploy has no running container. Cannot promote.",
+        )
+
+    # Check if already the production deploy
+    prod_id = await _get_production_deploy_id(db, project)
+    if prod_id == deploy.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This deploy is already the production deploy.",
+        )
+
+    # Mark current active deploys as superseded (keep containers alive)
+    from app.services.deploy_queue import mark_superseded
+    superseded_ids = await mark_superseded(db, deploy.env_id, deploy.id)
+
+    # Transition this deploy to active
+    deploy.status = "active"
+    deploy.promoted_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    # Update production Nginx config to point to this deploy's container
+    from app.services.dns_routing import register_production_routing
+    owner_username = project.owner.username if project.owner else "unknown"
+    backend_port = deploy.container_port or 3000
+
+    try:
+        await register_production_routing(
+            project_slug=project.slug,
+            owner_username=owner_username,
+            backend_ip=deploy.container_ip,
+            backend_port=backend_port,
+            deploy_id=str(deploy.id),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update production routing: {e}",
+        )
+
+    # Update project's production URL
+    from app.utils.dns import production_url
+    project.production_url = production_url(project.slug, owner_username)
+    await db.flush()
+
+    await write_audit_log(
+        db,
+        actor_user_id=current_user.id,
+        action="deploy.promote",
+        target_type="deploy",
+        target_id=str(deploy.id),
+        payload={
+            "project_id": str(project.id),
+            "superseded_ids": [str(sid) for sid in superseded_ids],
+        },
+    )
+    await db.commit()
+
+    return _deploy_to_response(deploy, deploy.id)
 
 
 # ---------------------------------------------------------------------------
@@ -563,10 +644,10 @@ async def destroy_deploy(
     await _check_ownership(db, current_user, project, "deploys.destroy")
 
     # Already terminal?
-    if deploy.status in ("rolled_back", "superseded"):
+    if deploy.status == "rolled_back":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Deploy is already in terminal state '{deploy.status}'",
+            detail="Deploy is already destroyed (rolled_back)",
         )
 
     # Check if this is the active production deploy
@@ -621,8 +702,8 @@ async def stop_deploy(
     """Stop a running deploy's container without destroying it.
 
     The container is stopped on Proxmox but not destroyed.
-    Nginx routing is removed so traffic stops flowing.
-    The deploy transitions from 'active' to 'stopped'.
+    Per-deploy Nginx routing is removed so traffic stops flowing.
+    The deploy transitions to 'stopped'.
     Can be restarted later with POST /deploys/{id}/start.
     """
     check_permission(current_user.role, "deploys.container")
@@ -635,31 +716,34 @@ async def stop_deploy(
     project = await _get_project_for_deploy(db, deploy)
     await _check_ownership(db, current_user, project, "deploys.container")
 
-    if deploy.status != "active":
+    if deploy.status not in ("active", "superseded"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Can only stop active deploys (current: '{deploy.status}')",
+            detail=f"Can only stop active or superseded deploys (current: '{deploy.status}')",
         )
 
-    # Stop the LXC container (don't destroy it)
-    from app.services.deploy_teardown import stop_lxc_container, _find_lxc_for_deploy
+    was_production = False
+    prod_id = await _get_production_deploy_id(db, project)
+    if prod_id == deploy.id:
+        was_production = True
+
+    # Stop the LXC container (don't destroy it) — use stored VMID
+    from app.services.deploy_teardown import stop_lxc_container
     from app.services.proxmox_adapter import get_proxmox_adapter
-    from app.services.dns_routing import unregister_deploy_routing
+    from app.services.dns_routing import unregister_deploy_routing, unregister_production_routing
 
     adapter = get_proxmox_adapter()
 
-    env_result = await db.execute(select(Environment).where(Environment.id == deploy.env_id))
-    environment = env_result.scalar_one_or_none()
-    hostname = f"{project.slug}-{environment.name}" if environment else ""
+    if deploy.container_vmid and deploy.container_node:
+        await stop_lxc_container(adapter, deploy.container_node, deploy.container_vmid)
 
-    if hostname:
-        lxc = await _find_lxc_for_deploy(adapter, hostname)
-        if lxc:
-            node, vmid = lxc
-            await stop_lxc_container(adapter, node, vmid)
-
-    # Remove Nginx routing (traffic should stop)
+    # Remove per-deploy Nginx routing (traffic should stop)
     await unregister_deploy_routing(str(deploy_id))
+
+    # If this was the production deploy, also remove production routing
+    if was_production:
+        await unregister_production_routing(project.slug)
+        project.production_url = None
 
     # Transition to stopped
     deploy.status = "stopped"
@@ -671,7 +755,7 @@ async def stop_deploy(
         action="deploy.stop",
         target_type="deploy",
         target_id=str(deploy.id),
-        payload={},
+        payload={"was_production": was_production},
     )
     await db.commit()
 
@@ -709,10 +793,8 @@ async def start_deploy(
             detail=f"Can only start stopped deploys (current: '{deploy.status}')",
         )
 
-    # Enforce container limit — may auto-stop other containers
-    stopped_ids = await _enforce_container_limit(
-        db, project.id, exclude_deploy_id=deploy_id,
-    )
+    # Enforce container limit — raises 409 if at capacity
+    await _check_container_limit(db, project.id)
 
     # Start the LXC container
     from app.services.deploy_teardown import _find_lxc_for_deploy
@@ -780,7 +862,7 @@ async def start_deploy(
         action="deploy.start",
         target_type="deploy",
         target_id=str(deploy.id),
-        payload={"auto_stopped": [str(sid) for sid in stopped_ids]},
+        payload={},
     )
     await db.commit()
 

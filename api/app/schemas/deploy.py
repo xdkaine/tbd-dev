@@ -24,6 +24,9 @@ class DeployResponse(BaseModel):
     url: str | None
     created_at: datetime
     promoted_at: datetime | None
+    is_production: bool = False
+    container_ip: str | None = None
+    container_vmid: int | None = None
 
     model_config = {"from_attributes": True}
 

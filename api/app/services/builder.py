@@ -991,8 +991,8 @@ async def run_build(build_id: uuid.UUID, db: AsyncSession) -> None:
         if project.auto_deploy:
             log("Auto-deploy enabled, triggering deploy...")
             await flush_logs(build)
+            from app.services.build_coordinator import trigger_deploy, ContainerLimitError
             try:
-                from app.services.build_coordinator import trigger_deploy
 
                 deploy = await trigger_deploy(
                     db,
@@ -1029,6 +1029,9 @@ async def run_build(build_id: uuid.UUID, db: AsyncSession) -> None:
                     )
                 )
                 log("Deploy task spawned (running outside build semaphore)")
+            except ContainerLimitError as e:
+                log(f"Auto-deploy skipped: {e}")
+                logger.info("Auto-deploy skipped for build %s: container limit reached", build_id)
             except Exception as e:
                 log(f"WARNING: Auto-deploy failed: {e}")
                 logger.exception("Auto-deploy failed for build %s", build_id)

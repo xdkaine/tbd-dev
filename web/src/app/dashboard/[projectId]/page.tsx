@@ -978,6 +978,7 @@ function DeploysTab({
   const [rolling, setRolling] = useState<string | null>(null);
   const [stopping, setStopping] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
+  const [promoting, setPromoting] = useState<string | null>(null);
   const [destroyTarget, setDestroyTarget] = useState<Deploy | null>(null);
   const [destroying, setDestroying] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -1020,6 +1021,19 @@ function DeploysTab({
       if (err instanceof ApiError) setActionError(err.detail);
     } finally {
       setStarting(null);
+    }
+  }
+
+  async function handlePromote(deployId: string) {
+    setPromoting(deployId);
+    setActionError("");
+    try {
+      await api.deploys.promote(deployId);
+      onUpdate();
+    } catch (err) {
+      if (err instanceof ApiError) setActionError(err.detail);
+    } finally {
+      setPromoting(null);
     }
   }
 
@@ -1097,11 +1111,14 @@ function DeploysTab({
           <tbody className="divide-y divide-zinc-800">
             {deploys.map((d) => {
               const isActive = d.status === "active" || d.status === "healthy";
+              const isSuperseded = d.status === "superseded";
               const isStopped = d.status === "stopped";
-              const isTerminal = d.status === "rolled_back" || d.status === "superseded";
-              const canRollback = isActive;
-              const canStop = isActive;
+              const isTerminal = d.status === "rolled_back";
+              const hasContainer = isActive || isSuperseded;
+              const canRollback = isActive && d.is_production;
+              const canStop = hasContainer;
               const canStart = isStopped;
+              const canPromote = hasContainer && !d.is_production;
               const canDestroy = !isTerminal;
 
               return (
@@ -1126,7 +1143,7 @@ function DeploysTab({
                         >
                           {d.url.replace(/^https?:\/\//, "")}
                         </a>
-                        {isActive && project.production_url && (
+                        {d.is_production && project.production_url && (
                           <a
                             href={project.production_url}
                             target="_blank"
@@ -1163,6 +1180,26 @@ function DeploysTab({
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
                               </svg>
                               Start
+                            </>
+                          )}
+                        </button>
+                      )}
+                      {/* Promote / Set Main URL (for active/superseded deploys not already production) */}
+                      {canPromote && (
+                        <button
+                          onClick={() => handlePromote(d.id)}
+                          disabled={promoting === d.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-brand-800 px-2 py-1 text-xs font-medium text-brand-400 hover:bg-brand-950/30 disabled:opacity-50 transition-colors"
+                          title="Set as production URL"
+                        >
+                          {promoting === d.id ? (
+                            "Promoting..."
+                          ) : (
+                            <>
+                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
+                              </svg>
+                              Set Main URL
                             </>
                           )}
                         </button>
@@ -1268,6 +1305,8 @@ function BuildsTab({
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [rebuildError, setRebuildError] = useState("");
+  const [deploying, setDeploying] = useState<string | null>(null);
+  const [deployError, setDeployError] = useState("");
   const [deployLogs, setDeployLogs] = useState<DeployLogsResponse | null>(null);
   const logsEndRef = useRef<HTMLPreElement>(null);
   const deployLogsEndRef = useRef<HTMLPreElement>(null);
@@ -1394,6 +1433,20 @@ function BuildsTab({
     }
   }
 
+  async function handleDeployBuild(buildId: string) {
+    setDeploying(buildId);
+    setDeployError("");
+    try {
+      await api.builds.deploy(projectId, buildId, project.default_env);
+      onUpdate();
+    } catch (err) {
+      if (err instanceof ApiError) setDeployError(err.detail);
+      else setDeployError("Failed to trigger deploy");
+    } finally {
+      setDeploying(null);
+    }
+  }
+
   const hasRepo = !!project.repo;
 
   return (
@@ -1439,6 +1492,12 @@ function BuildsTab({
         <p className="mb-3 text-xs text-red-400">{rebuildError}</p>
       )}
 
+      {deployError && (
+        <div className="mb-3 rounded-md border border-red-800 bg-red-950/30 px-3 py-2">
+          <p className="text-xs text-red-400">{deployError}</p>
+        </div>
+      )}
+
       {builds.length === 0 ? (
         <p className="py-8 text-center text-sm text-zinc-500">
           {hasRepo
@@ -1469,7 +1528,7 @@ function BuildsTab({
                   Duration
                 </th>
                 <th className="px-4 py-2 text-right font-medium text-zinc-500">
-                  Logs
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -1515,12 +1574,33 @@ function BuildsTab({
                         : "—"}
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <button
-                      onClick={() => handleViewLogs(b.id)}
-                      className="text-xs text-brand-600 hover:text-brand-800"
-                    >
-                      {viewingLogs === b.id ? "Hide" : "View"}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      {b.status === "success" && b.image_ref && (
+                        <button
+                          onClick={() => handleDeployBuild(b.id)}
+                          disabled={deploying === b.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-green-800 px-2 py-1 text-xs font-medium text-green-400 hover:bg-green-950/30 disabled:opacity-50 transition-colors"
+                          title={`Deploy this build to ${project.default_env}`}
+                        >
+                          {deploying === b.id ? (
+                            "Deploying..."
+                          ) : (
+                            <>
+                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.841m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+                              </svg>
+                              Deploy
+                            </>
+                          )}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleViewLogs(b.id)}
+                        className="text-xs text-brand-600 hover:text-brand-800"
+                      >
+                        {viewingLogs === b.id ? "Hide" : "Logs"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

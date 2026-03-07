@@ -35,7 +35,7 @@ DEPLOY_TRANSITIONS = {
     "stopped": ["active", "rolled_back"],  # restart or rollback
     "failed": ["queued", "rolled_back"],  # retry or rollback
     "rolled_back": [],  # terminal
-    "superseded": [],  # terminal
+    "superseded": ["active", "stopped"],  # can be re-promoted or stopped
 }
 
 

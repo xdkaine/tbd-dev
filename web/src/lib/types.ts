@@ -186,6 +186,9 @@ export interface Deploy {
   url: string | null;
   created_at: string;
   promoted_at: string | null;
+  is_production: boolean;
+  container_ip: string | null;
+  container_vmid: number | null;
 }
 
 export interface DeployListResponse {

@@ -25,7 +25,7 @@ from app.models.environment import Environment
 from app.models.project import Project, Repo
 from app.schemas.build import BuildCreate, BuildListResponse, BuildLogsResponse, BuildResponse
 from app.services.audit import write_audit_log
-from app.services.build_coordinator import create_build_for_push, intake_artifact, trigger_deploy
+from app.services.build_coordinator import ContainerLimitError, create_build_for_push, intake_artifact, trigger_deploy
 from app.services.deploy_executor import DeployContext, execute_deploy
 from app.services.github import get_branch_head_sha, get_owner_github_token
 from app.services.rbac import Role, check_permission
@@ -526,6 +526,8 @@ async def deploy_from_build(
             env_name=body.env,
             actor_user_id=current_user.id,
         )
+    except ContainerLimitError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
