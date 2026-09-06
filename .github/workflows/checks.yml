@@ -2,8 +2,6 @@ name: Checks
 
 on:
   workflow_call:
-  pull_request:
-    branches: [main, dev]
 
 permissions:
   contents: read
@@ -57,4 +55,5 @@ jobs:
       - name: Check TypeScript
         run: npx tsc --noEmit
       - name: Build production application
+        if: github.event_name == 'pull_request'
         run: npm run build
