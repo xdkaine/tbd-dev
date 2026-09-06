@@ -14,12 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.middleware.auth import CurrentUser, create_access_token, get_current_user
+from app.middleware.auth import CurrentUser, create_access_token, get_current_user, get_logout_user, validate_provider_session
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse, UserInfo
+from app.schemas.auth import LoginRequest, OidcExchangeRequest, TokenResponse, UserInfo
+from app.services import oidc as oidc_service
 from app.services.audit import write_audit_log
 from app.services.auth import ad_auth_service
-from app.services.rbac import resolve_role
+from app.services.oidc import OidcError
+from app.services.rbac import resolve_application_role, resolve_role
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,8 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     3. Find or create user in the local database.
     4. Issue a JWT token.
     """
+    if settings.oidc_require_application_access:
+        raise HTTPException(status_code=403, detail="Use auth-service SSO to sign in to TBD")
     # Authenticate against AD (offloaded to thread — ldap3 is synchronous)
     ad_user = await ad_auth_service.authenticate_async(body.username, body.password)
     if ad_user is None:
@@ -94,6 +98,125 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     )
 
 
+@router.post("/oidc/exchange", response_model=TokenResponse)
+async def oidc_exchange(body: OidcExchangeRequest, db: AsyncSession = Depends(get_db)):
+    """Exchange an auth-service OIDC ID token for a platform session JWT.
+
+    The web console completes the authorization-code + PKCE flow against the
+    platform auth-service and forwards the ID token here. We re-verify the
+    token signature/claims against the provider JWKS, resolve the role from
+    AD group CNs, upsert the user, and issue our standard HS256 session
+    token — identical contract to the AD login path.
+    """
+    try:
+        claims = await oidc_service.verify_id_token(body.id_token)
+    except OidcError as exc:
+        logger.warning("OIDC exchange rejected: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="SSO sign-in failed: invalid or expired token",
+        ) from exc
+
+    if settings.oidc_require_application_access:
+        await validate_provider_session({"provider_sid": claims.get("sid"), "provider_sub": claims.get("sub")})
+
+    # This provider uses the canonical AD username as its signed subject. Its
+    # conforming code-flow ID tokens may omit optional profile claims.
+    sub = claims.get("sub")
+    if not isinstance(sub, str) or not sub.strip():
+        raise HTTPException(status_code=401, detail="SSO sign-in failed: missing subject")
+    profile = {}
+    if body.access_token and not claims.get("email"):
+        try:
+            profile = await oidc_service.fetch_userinfo(body.access_token, sub)
+        except OidcError as exc:
+            raise HTTPException(status_code=401, detail="SSO profile verification failed") from exc
+    preferred_username = claims.get("preferred_username") or profile.get("preferred_username")
+    username = (preferred_username if isinstance(preferred_username, str)
+                and preferred_username.strip() else sub)
+    email = claims.get("email") or profile.get("email") or ""
+    display_name = claims.get("name") or profile.get("name") or ""
+    groups = [g for g in (claims.get("groups") or []) if isinstance(g, str)]
+    amr = [a for a in (claims.get("amr") or []) if isinstance(a, str)]
+
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="SSO sign-in failed: ID token has no preferred_username",
+        )
+
+    # Resolve platform role from AD group CNs supplied by the provider
+    role = (resolve_application_role(claims) if settings.oidc_require_application_access
+            else resolve_role(groups))
+
+    # Find or create user in local DB (check username first, then email)
+    result = await db.execute(select(User).where(User.username == username))
+    user = result.scalar_one_or_none()
+
+    if user is None and email:
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if user is not None and settings.oidc_require_application_access:
+            raise HTTPException(
+                status_code=403,
+                detail="An account already uses this email; account linking requires an administrator",
+            )
+
+    if user is None:
+        if not isinstance(email, str) or not email.strip():
+            raise HTTPException(status_code=403, detail="SSO profile email is required for a new user")
+        user = User(
+            username=username,
+            display_name=display_name or username,
+            email=email,
+            # ad_dn is NOT NULL; record the OIDC subject for provenance
+            ad_dn=f"oidc:{sub}" if sub else "oidc:",
+        )
+        db.add(user)
+        await db.flush()
+        logger.info("Created new user via SSO: %s (role=%s)", user.username, role.value)
+    else:
+        user.username = username
+        user.display_name = display_name or user.display_name
+        if email:
+            user.email = email
+        await db.flush()
+
+    await write_audit_log(
+        db,
+        actor_user_id=user.id,
+        action="auth.login",
+        target_type="user",
+        target_id=str(user.id),
+        payload={"role": role.value, "method": "oidc", "amr": amr},
+    )
+
+    token, expires_in = create_access_token(
+        user.id, user.username, role.value,
+        application_access=settings.oidc_require_application_access,
+        source_expires_at=claims.get("exp"),
+        provider_sid=claims.get("sid"), provider_sub=claims.get("sub"),
+    )
+
+    return TokenResponse(
+        access_token=token,
+        token_type="bearer",
+        expires_in=expires_in,
+    )
+
+
+@router.post("/logout", status_code=204)
+async def logout(current_user: CurrentUser = Depends(get_logout_user)):
+    # Authorization bearer is explicitly attached by our UI, not an ambient cookie.
+    # Provider termination also ends sibling applications sharing this SSO session.
+    if not settings.oidc_require_application_access:
+        raise HTTPException(status_code=409, detail="Server-side logout requires auth-service SSO")
+    try:
+        await oidc_service.terminate_session(current_user.provider_sid, current_user.provider_sub)
+    except OidcError as exc:
+        raise HTTPException(status_code=503, detail="Sign-out was not confirmed; please retry") from exc
+
+
 @router.get("/me", response_model=UserInfo)
 async def get_me(
     current_user: CurrentUser = Depends(get_current_user),
@@ -127,7 +250,7 @@ GITHUB_USER_API = "https://api.github.com/user"
 _STATE_EXPIRE_MINUTES = 5
 
 
-def _create_oauth_state(user_id: str) -> str:
+def _create_oauth_state(user_id: str, current_user: CurrentUser | None = None) -> str:
     """Create a signed state token embedding the user ID."""
     payload = {
         "sub": user_id,
@@ -135,6 +258,11 @@ def _create_oauth_state(user_id: str) -> str:
         "exp": datetime.now(timezone.utc) + timedelta(minutes=_STATE_EXPIRE_MINUTES),
         "iat": datetime.now(timezone.utc),
     }
+    if settings.oidc_require_application_access:
+        if current_user is None or not current_user.provider_sid or not current_user.provider_sub:
+            raise HTTPException(status_code=401, detail="Sign in again")
+        payload.update(provider_sid=current_user.provider_sid, provider_sub=current_user.provider_sub)
+        payload["exp"] = min(payload["exp"].timestamp(), current_user.expires_at or 0)
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 
@@ -166,7 +294,7 @@ async def github_oauth_start(
             detail="GitHub OAuth is not configured",
         )
 
-    state = _create_oauth_state(str(current_user.id))
+    state = _create_oauth_state(str(current_user.id), current_user)
 
     params = {
         "client_id": settings.github_client_id,
@@ -189,6 +317,8 @@ async def github_oauth_callback(
     # Validate state token
     try:
         user_id_str = _verify_oauth_state(state)
+        state_claims = jwt.decode(state, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        await validate_provider_session(state_claims)
     except ValueError as exc:
         logger.warning("GitHub OAuth state validation failed: %s", exc)
         return RedirectResponse(
@@ -280,6 +410,8 @@ async def github_oauth_callback(
             status_code=302,
         )
 
+    # Recheck after external OAuth requests before committing the account link.
+    await validate_provider_session(state_claims)
     user.github_id = gh_id
     user.github_username = gh_username
     user.github_token = access_token

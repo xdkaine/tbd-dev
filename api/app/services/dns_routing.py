@@ -22,12 +22,13 @@ detected.
 """
 
 import asyncio
+import os
 import logging
 from pathlib import Path
 from textwrap import dedent
 
 from app.config import settings
-from app.utils.dns import deploy_hostname, production_hostname, sanitize_username
+from app.utils.dns import deploy_hostname, production_hostname
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +336,16 @@ PRODUCTION_SERVER_TEMPLATE = dedent("""\
 """)
 
 
+if os.environ.get("NGINX_TLS_TERMINATED_UPSTREAM") == "true":
+    for _name in ("SERVER_TEMPLATE", "PRODUCTION_SERVER_TEMPLATE"):
+        _template = globals()[_name]
+        _template = _template.replace("listen 443 ssl;", "listen 8080;")
+        _template = _template.replace("ssl_certificate     /etc/nginx/ssl/tbd.crt;", "")
+        _template = _template.replace("ssl_certificate_key /etc/nginx/ssl/tbd.key;", "")
+        _template = _template.replace("X-Forwarded-Proto $scheme", "X-Forwarded-Proto $http_x_forwarded_proto")
+        globals()[_name] = _template
+
+
 def _make_production_upstream_name(project_slug: str) -> str:
     """Generate a safe Nginx upstream name for a production alias.
 
@@ -350,6 +361,7 @@ async def register_production_routing(
     backend_ip: str,
     backend_port: int,
     deploy_id: str = "",
+    custom_subdomain: str | None = None,
 ) -> Path:
     """Write/overwrite the persistent production URL Nginx config.
 
@@ -374,7 +386,7 @@ async def register_production_routing(
 
         backend_ip = _strip_cidr(backend_ip)
         upstream_name = _make_production_upstream_name(project_slug)
-        hostname = production_hostname(project_slug, owner_username)
+        hostname = production_hostname(project_slug, owner_username, custom_subdomain)
         timestamp = datetime.now(timezone.utc).isoformat()
 
         config = PRODUCTION_UPSTREAM_TEMPLATE.format(

@@ -84,7 +84,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         now = time.monotonic()
 
         # Choose limit based on path
-        is_auth = path.startswith("/auth/login")
+        is_auth = path.startswith("/auth/login") or path == "/auth/oidc/exchange"
         rpm_limit = settings.rate_limit_auth_rpm if is_auth else settings.rate_limit_rpm
 
         # Prune + check

@@ -3,7 +3,9 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.utils.dns import normalize_production_label
 
 
 class RepoResponse(BaseModel):
@@ -26,6 +28,17 @@ class ProjectCreate(BaseModel):
     slug: str = Field(..., min_length=1, max_length=255, pattern=r"^[a-z0-9-]+$")
     repo_url: str | None = None
     default_env: str = Field(default="production", max_length=50)
+    custom_subdomain: str | None = None
+
+    @field_validator("custom_subdomain", mode="before")
+    @classmethod
+    def validate_custom_subdomain(cls, value: str | None) -> str | None:
+        return normalize_production_label(value)
+
+    @model_validator(mode="after")
+    def validate_effective_subdomain(self) -> "ProjectCreate":
+        normalize_production_label(self.custom_subdomain or self.slug)
+        return self
 
 
 class ProjectUpdate(BaseModel):
@@ -49,6 +62,12 @@ class ProjectUpdate(BaseModel):
     deploy_locked: bool | None = None
     # Project lifecycle
     expires_at: datetime | None = None
+    custom_subdomain: str | None = None
+
+    @field_validator("custom_subdomain", mode="before")
+    @classmethod
+    def validate_custom_subdomain(cls, value: str | None) -> str | None:
+        return normalize_production_label(value)
 
 
 class ProjectResponse(BaseModel):
@@ -72,6 +91,7 @@ class ProjectResponse(BaseModel):
     deploy_locked: bool = False
     expires_at: datetime | None = None
     production_url: str | None = None
+    custom_subdomain: str | None = None
     repo: RepoResponse | None = None
     created_at: datetime
 

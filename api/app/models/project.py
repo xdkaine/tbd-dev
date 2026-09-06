@@ -62,7 +62,11 @@ class Project(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # Persistent production URL (Vercel-style vanity URL)
     production_url: Mapped[str | None] = mapped_column(
         String(1024), nullable=True, default=None,
-        comment="Persistent production URL: <slug>-<username>.dev.sdc.cpp",
+        comment="Persistent production URL: <custom-subdomain-or-slug>.<deploy-domain>",
+    )
+    custom_subdomain: Mapped[str] = mapped_column(
+        String(63), unique=True, nullable=False, index=True,
+        comment="Globally unique DNS label for the production URL",
     )
 
     # Relationships

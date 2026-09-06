@@ -1877,6 +1877,8 @@ function SettingsTab({
   const router = useRouter();
   const [autoDeploy, setAutoDeploy] = useState(project.auto_deploy);
   const [saving, setSaving] = useState(false);
+  const [subdomain, setSubdomain] = useState(project.custom_subdomain ?? project.slug);
+  const [savingDomain, setSavingDomain] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState("");
@@ -1918,6 +1920,25 @@ function SettingsTab({
     (healthCheckTimeout || null) !== (project.health_check_timeout?.toString() ?? null) ||
     (webhookUrl || null) !== (project.webhook_url ?? null) ||
     (expiresAt || null) !== (project.expires_at ? project.expires_at.slice(0, 16) : null);
+  const domainChanged = subdomain !== (project.custom_subdomain ?? project.slug);
+
+  async function handleSaveDomain() {
+    setSavingDomain(true);
+    setMessage("");
+    try {
+      const updatedProject = await api.projects.update(projectId, {
+        custom_subdomain: subdomain.trim().toLowerCase() || null,
+      });
+      setSubdomain(updatedProject.custom_subdomain ?? updatedProject.slug);
+      setMessage("Production subdomain saved. The production route has been updated.");
+      onUpdate();
+    } catch (err) {
+      if (err instanceof ApiError) setMessage(err.detail);
+      else setMessage("Failed to save production subdomain.");
+    } finally {
+      setSavingDomain(false);
+    }
+  }
 
   async function handleToggleAutoDeploy() {
     const newValue = !autoDeploy;
@@ -2026,6 +2047,42 @@ function SettingsTab({
 
   return (
     <div className="space-y-6">
+      {/* Production domain */}
+      <div className="rounded-lg border border-zinc-800 p-4">
+        <h3 className="mb-1 text-sm font-semibold text-zinc-100">
+          Production Domain
+        </h3>
+        <p className="mb-4 text-xs text-zinc-500">
+          Choose a unique hostname for the current production deploy. Platform
+          service names such as api, auth, and registry are reserved.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="flex-1 text-xs font-medium text-zinc-400">
+            Subdomain
+            <div className="mt-1 flex items-center rounded-md border border-zinc-700 bg-zinc-950 focus-within:border-brand-600">
+              <input
+                value={subdomain}
+                onChange={(event) => setSubdomain(event.target.value.toLowerCase())}
+                maxLength={63}
+                pattern="[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+                className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-zinc-100 outline-none"
+                aria-label="Production subdomain"
+              />
+              <span className="shrink-0 pr-3 text-xs text-zinc-500">
+                .tbd-dev.calpolysoc.org
+              </span>
+            </div>
+          </label>
+          <button
+            onClick={handleSaveDomain}
+            disabled={!domainChanged || savingDomain}
+            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {savingDomain ? "Saving..." : "Save domain"}
+          </button>
+        </div>
+      </div>
+
       {/* Connected repository */}
       <div className="rounded-lg border border-zinc-800 p-4">
         <h3 className="mb-3 text-sm font-semibold text-zinc-100">

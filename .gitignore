@@ -45,3 +45,8 @@ api/alembic/versions/__pycache__/
 
 .agents
 skills-lock.json
+*.tsbuildinfo
+.pytest_cache/
+.ruff_cache/
+.env.*
+!.env.example

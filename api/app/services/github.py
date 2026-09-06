@@ -663,24 +663,24 @@ async def create_repo_from_template(
 
 
 async def get_branch_head_sha(
-    token: str,
+    token: str | None,
     repo_full_name: str,
     branch: str = "main",
 ) -> str | None:
-    """Fetch the HEAD commit SHA of a branch using a user's OAuth token.
+    """Fetch the HEAD commit SHA of a branch.
+
+    Uses the user's OAuth token when provided; without a token the request is
+    unauthenticated, which works for public repos (60 req/hr anonymous limit).
 
     Returns the full 40-char SHA, or None on failure.
     """
     url = f"{GITHUB_API_BASE}/repos/{repo_full_name}/commits/{branch}"
+    headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                url,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Accept": "application/vnd.github+json",
-                },
-            )
+            resp = await client.get(url, headers=headers)
             resp.raise_for_status()
             data = resp.json()
             sha = data.get("sha")

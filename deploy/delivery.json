@@ -1,0 +1,26 @@
+{
+  "repository": "xdkaine/tbd-dev",
+  "schemaInputs": {
+    "tbd": [
+      "api/alembic"
+    ]
+  },
+  "images": [
+    {
+      "kind": "api",
+      "image": "ghcr.io/xdkaine/tbd-api",
+      "context": "api",
+      "dockerfile": "api/Dockerfile",
+      "target": "",
+      "buildArgs": ""
+    },
+    {
+      "kind": "web",
+      "image": "ghcr.io/xdkaine/tbd-web",
+      "context": "web",
+      "dockerfile": "web/Dockerfile",
+      "target": "",
+      "buildArgs": ""
+    }
+  ]
+}

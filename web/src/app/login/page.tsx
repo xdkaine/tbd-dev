@@ -1,10 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth";
 import { ApiError } from "@/lib/api";
 import Link from "next/link";
+
+const SSO_ERROR_MESSAGES: Record<string, string> = {
+  not_configured: "SSO is not configured for this environment.",
+  invalid_callback: "The auth service returned an incomplete sign-in response.",
+  missing_flow_cookie: "Your browser did not return the sign-in cookie. Please retry with cookies enabled.",
+  state_mismatch: "Sign-in session expired or invalid. Please try again.",
+  nonce_mismatch: "Sign-in could not be verified. Please try again.",
+  token_exchange_failed: "Could not complete sign-in with the auth service.",
+  missing_id_token: "Auth service did not return a sign-in token.",
+  bad_id_token: "Auth service returned an unreadable sign-in token.",
+  exchange_rejected: "The platform rejected the SSO sign-in.",
+  exchange_failed: "Could not reach the API to complete SSO sign-in.",
+  no_session_token: "SSO sign-in did not produce a session token.",
+};
 
 export default function LoginPage() {
   const { login, user } = useAuth();
@@ -13,6 +27,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Surface SSO errors passed back by /api/auth/oidc/callback
+  useEffect(() => {
+    const ssoError = new URLSearchParams(window.location.search).get("sso_error");
+    if (ssoError) {
+      setError(SSO_ERROR_MESSAGES[ssoError] ?? `SSO sign-in failed (${ssoError}).`);
+      history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
 
   // Already logged in — redirect
   if (user) {
@@ -67,8 +90,37 @@ export default function LoginPage() {
               <span className="text-brand-500">{">"}</span> authenticate
             </h1>
             <p className="mt-2 text-xs text-zinc-600">
-              Sign in with your Active Directory credentials
+              Sign in via SSO or with your Active Directory credentials
             </p>
+          </div>
+
+          <a
+            href="/api/auth/oidc/login?redirect=/dashboard"
+            className="mb-5 flex w-full items-center justify-center gap-2 rounded-lg border border-brand-500/40 bg-brand-500/10 px-4 py-2.5 text-sm font-medium text-brand-400 transition-all hover:border-brand-500/70 hover:bg-brand-500/20"
+          >
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <polyline points="10 17 15 12 10 7" />
+              <line x1="15" y1="12" x2="3" y2="12" />
+            </svg>
+            Sign in with SSO
+          </a>
+
+          <div className="mb-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-zinc-800" />
+            <span className="text-[10px] uppercase tracking-wider text-zinc-700">
+              or AD credentials
+            </span>
+            <div className="h-px flex-1 bg-zinc-800" />
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

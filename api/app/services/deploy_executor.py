@@ -26,7 +26,7 @@ import asyncio
 import ipaddress
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +64,8 @@ from app.services.systemd_generator import (
     install_unit_to_rootfs,
 )
 
+from app.services.resource_ownership import ownership_marker, require_owned, resource_hostname
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,6 +99,8 @@ class DeployContext:
     target_node: str | None = None
     vmid: int | None = None
     snapshot_name: str | None = None
+    created_by_attempt: bool = False
+    attempt_id: uuid.UUID = field(default_factory=uuid.uuid4)
 
     # Previous container info (for rollback)
     existing_vmid: int | None = None
@@ -110,7 +114,7 @@ class DeployContext:
     @property
     def hostname(self) -> str:
         """LXC hostname for this deploy."""
-        return f"{self.project.slug}-{self.environment.name}"
+        return resource_hostname(self.project.id, self.environment.id)
 
     @property
     def env_type(self) -> str:
@@ -121,6 +125,13 @@ class DeployContext:
     def template_filename(self) -> str:
         """Filename for the CT template tarball on Proxmox."""
         return f"tbd-{self.tag}.tar.gz"
+
+
+async def _require_attempt_owned(adapter, ctx):
+    if not ctx.created_by_attempt:
+        raise ProxmoxError("LXC was not successfully created by this attempt")
+    await require_owned(adapter, ctx.target_node, ctx.vmid, ctx.project.id,
+                        ctx.environment.id, ctx.deploy.id, ctx.attempt_id)
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +275,7 @@ async def execute_deploy(
     )
 
     adapter = get_proxmox_adapter()
+    template_volume_id: str | None = None
 
     # --- Log accumulation (mirrors builder.py pattern) ---
     from datetime import datetime, timezone
@@ -546,6 +558,8 @@ async def execute_deploy(
             disk_size=required_disk_gb,
             bridge=bridge,
             tags=["tbd"],
+            description=ownership_marker(ctx.project.id, ctx.environment.id,
+                                         ctx.deploy.id, ctx.attempt_id),
         )
 
         # Apply resource pool if configured
@@ -554,7 +568,11 @@ async def execute_deploy(
 
         # Apply network config
         if _use_flat_ip() and ctx.ip_address:
-            # Flat IP mode — no VLAN tag, use flat IP and gateway directly
+            # Flat IP mode — static IP/gateway directly; optional fixed VLAN tag
+            # (PROXMOX_VLAN_TAG) when the bridge only reaches the target subnet
+            # as a tagged VLAN.
+            if settings.proxmox_vlan_tag:
+                lxc_spec.vlan_tag = settings.proxmox_vlan_tag
             lxc_spec.ip_address = ctx.ip_address
             lxc_spec.gateway = ctx.gateway
         elif ctx.vlan:
@@ -583,26 +601,8 @@ async def execute_deploy(
         log("Step 10: Creating LXC container...")
         logger.info("[%s] Step 10: Creating LXC container", deploy_id)
         try:
-            # Discover existing container (if any) for rollback purposes.
-            # We do NOT destroy it yet — it stays alive until the new one
-            # passes health checks.
-            try:
-                existing_containers = await adapter.list_lxc_on_node(ctx.target_node)
-                existing = [
-                    c for c in existing_containers
-                    if c.get("name") == ctx.hostname
-                ]
-                if existing:
-                    ctx.existing_vmid = existing[0].get("vmid")
-                    ctx.existing_node = ctx.target_node
-                    log(f"Found existing LXC {ctx.existing_vmid} — will replace after health check")
-                    logger.info(
-                        "[%s] Existing LXC %s found on %s — keeping for rollback",
-                        deploy_id, ctx.existing_vmid, ctx.target_node,
-                    )
-            except ProxmoxError:
-                # No existing container, that's fine
-                pass
+            # Replacement ownership is tracked by deployment records and handled
+            # by the supersede path. Never adopt a container by its display name.
 
             # Create new container from uploaded template (new VMID)
             upid = await adapter.create_lxc(ctx.target_node, ctx.vmid, lxc_spec)
@@ -613,6 +613,8 @@ async def execute_deploy(
             )
             if not success:
                 raise ProxmoxError("LXC creation task failed")
+            ctx.created_by_attempt = True
+            await _require_attempt_owned(adapter, ctx)
 
         except ProxmoxError as e:
             log(f"ERROR: LXC creation failed: {e}")
@@ -705,9 +707,10 @@ async def execute_deploy(
                 )
 
                 # Destroy the failed new container
-                if ctx.vmid and ctx.target_node:
+                if ctx.created_by_attempt and ctx.vmid and ctx.target_node:
                     log("Destroying failed container...")
                     try:
+                        await _require_attempt_owned(adapter, ctx)
                         # Stop first — but tolerate "not running" errors
                         # (the container may have already crashed)
                         try:
@@ -716,6 +719,7 @@ async def execute_deploy(
                                 await adapter.wait_for_task(ctx.target_node, stop_upid, timeout=60.0)
                         except ProxmoxError as stop_err:
                             logger.debug("[%s] Stop before destroy failed (container may already be stopped): %s", deploy_id, stop_err)
+                        await _require_attempt_owned(adapter, ctx)
                         destroy_upid = await adapter.destroy_lxc(ctx.target_node, ctx.vmid)
                         if destroy_upid:
                             await adapter.wait_for_task(ctx.target_node, destroy_upid, timeout=60.0)
@@ -854,8 +858,13 @@ async def execute_deploy(
                             backend_ip=health_ip,
                             backend_port=ctx.port,
                             deploy_id=str(deploy_id),
+                            custom_subdomain=ctx.project.custom_subdomain,
                         )
-                        prod_url = build_production_url(ctx.project.slug, owner_username)
+                        prod_url = build_production_url(
+                            ctx.project.slug,
+                            owner_username,
+                            ctx.project.custom_subdomain,
+                        )
                         ctx.project.production_url = prod_url
                         await db.flush()
                         log(f"Production URL updated: {prod_url}")
@@ -908,9 +917,10 @@ async def execute_deploy(
         # Destroy container if it was created but the deploy failed
         # (the health_check handler already destroys on its own failure
         # path and clears ctx.vmid, so this only fires for other stages)
-        if ctx.vmid and ctx.target_node:
+        if ctx.created_by_attempt and ctx.vmid and ctx.target_node:
             log(f"Cleaning up: destroying failed LXC {ctx.vmid}...")
             try:
+                await _require_attempt_owned(adapter, ctx)
                 # Stop first — but tolerate "not running" errors
                 # (the container may have already crashed)
                 try:
@@ -919,6 +929,7 @@ async def execute_deploy(
                         await adapter.wait_for_task(ctx.target_node, stop_upid, timeout=60.0)
                 except ProxmoxError as stop_err:
                     logger.debug("[%s] Stop before destroy failed (container may already be stopped): %s", deploy_id, stop_err)
+                await _require_attempt_owned(adapter, ctx)
                 destroy_upid = await adapter.destroy_lxc(ctx.target_node, ctx.vmid)
                 if destroy_upid:
                     await adapter.wait_for_task(ctx.target_node, destroy_upid, timeout=60.0)
@@ -971,11 +982,13 @@ async def execute_deploy(
         logger.exception("Unexpected error in deploy %s: %s", deploy_id, e)
 
         # Best-effort container cleanup
-        if ctx.vmid and ctx.target_node:
+        if ctx.created_by_attempt and ctx.vmid and ctx.target_node:
             try:
+                await _require_attempt_owned(adapter, ctx)
                 stop_upid = await adapter.stop_lxc(ctx.target_node, ctx.vmid)
                 if stop_upid:
                     await adapter.wait_for_task(ctx.target_node, stop_upid, timeout=60.0)
+                await _require_attempt_owned(adapter, ctx)
                 destroy_upid = await adapter.destroy_lxc(ctx.target_node, ctx.vmid)
                 if destroy_upid:
                     await adapter.wait_for_task(ctx.target_node, destroy_upid, timeout=60.0)
@@ -1003,3 +1016,23 @@ async def execute_deploy(
             pass
 
         return ctx.deploy
+
+    finally:
+        # The template is only an import artifact. Once create_lxc has consumed
+        # it (or the deploy has failed), retaining it leaks storage indefinitely.
+        if template_volume_id and ctx.target_node:
+            try:
+                delete_upid = await adapter.delete_storage_volume(
+                    ctx.target_node,
+                    template_volume_id,
+                )
+                if delete_upid:
+                    await adapter.wait_for_task(ctx.target_node, delete_upid, timeout=60.0)
+                logger.info("[%s] Deleted temporary CT template %s", deploy_id, template_volume_id)
+            except ProxmoxError as cleanup_error:
+                logger.warning(
+                    "[%s] Failed to delete temporary CT template %s: %s",
+                    deploy_id,
+                    template_volume_id,
+                    cleanup_error,
+                )

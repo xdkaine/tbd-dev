@@ -24,7 +24,6 @@ from sqlalchemy.orm import selectinload
 
 from app.models.deploy import Deploy
 from app.models.environment import Environment
-from app.models.project import Project
 from app.services.dns_routing import (
     signal_nginx_reload,
     unregister_deploy_routing,
@@ -35,6 +34,8 @@ from app.services.proxmox_adapter import (
     get_proxmox_adapter,
 )
 
+from app.services.resource_ownership import require_owned, resource_hostname
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,41 +44,20 @@ class TeardownError(Exception):
     pass
 
 
-async def _find_lxc_for_deploy(
-    adapter: ProxmoxAdapter,
-    hostname: str,
-) -> tuple[str, int] | None:
-    """Find the LXC container matching a deploy's hostname.
-
-    Scans all TBD-tagged containers across the cluster for one whose
-    name matches the expected hostname pattern (<slug>-<env_name>).
-
-    Returns:
-        (node, vmid) if found, None otherwise.
-    """
-    try:
-        containers = await adapter.list_all_tbd_containers()
-        for ct in containers:
-            if ct.get("name") == hostname:
-                vmid = ct.get("vmid")
-                node = ct.get("node")
-                if vmid and node:
-                    return (node, int(vmid))
-    except ProxmoxError as e:
-        logger.warning("Failed to scan for LXC matching '%s': %s", hostname, e)
-    return None
-
-
 async def stop_lxc_container(
     adapter: ProxmoxAdapter,
     node: str,
     vmid: int,
+    *,
+    ownership: tuple,
 ) -> bool:
     """Stop an LXC container. Returns True if stopped successfully."""
     try:
+        await require_owned(adapter, node, vmid, *ownership)
         stop_upid = await adapter.stop_lxc(node, vmid)
         if stop_upid:
-            await adapter.wait_for_task(node, stop_upid, timeout=60.0)
+            if not await adapter.wait_for_task(node, stop_upid, timeout=60.0):
+                return False
         logger.info("Stopped LXC %d on %s", vmid, node)
         return True
     except ProxmoxError as e:
@@ -89,18 +69,26 @@ async def destroy_lxc_container(
     adapter: ProxmoxAdapter,
     node: str,
     vmid: int,
+    *,
+    ownership: tuple,
 ) -> bool:
     """Stop and destroy an LXC container. Returns True on success."""
     # Stop first (destroy requires stopped state)
-    await stop_lxc_container(adapter, node, vmid)
+    if not await stop_lxc_container(adapter, node, vmid, ownership=ownership):
+        return False
 
     try:
+        await require_owned(adapter, node, vmid, *ownership)
         destroy_upid = await adapter.destroy_lxc(node, vmid)
         if destroy_upid:
-            await adapter.wait_for_task(node, destroy_upid, timeout=60.0)
+            if not await adapter.wait_for_task(node, destroy_upid, timeout=60.0):
+                return False
         logger.info("Destroyed LXC %d on %s", vmid, node)
         return True
     except ProxmoxError as e:
+        if e.status_code == 404:
+            logger.info("LXC %d on %s is already absent", vmid, node)
+            return True
         logger.error("Failed to destroy LXC %d on %s: %s", vmid, node, e)
         return False
 
@@ -133,7 +121,10 @@ async def teardown_deploy(
             Set to False for "soft" teardown (just clean up routing).
 
     Returns:
-        True if teardown completed (even partially), False if deploy not found.
+        True if teardown completed, False if deploy was not found.
+
+    Raises:
+        TeardownError: If container absence cannot be proven or destruction fails.
     """
     # Load deploy with environment and project
     result = await db.execute(
@@ -155,7 +146,8 @@ async def teardown_deploy(
         logger.warning("Teardown: deploy %s missing env/project refs", deploy_id)
         return False
 
-    hostname = f"{project.slug}-{environment.name}"
+    hostname = resource_hostname(project.id, environment.id)
+    ownership = (project.id, environment.id, deploy.id)
     deploy_id_str = str(deploy_id)
 
     logger.info(
@@ -167,12 +159,8 @@ async def teardown_deploy(
 
     # Step 1: Find and destroy LXC container
     #
-    # IMPORTANT: Use the deploy's stored container_vmid / container_node
-    # when available.  The hostname-based scan (`_find_lxc_for_deploy`)
-    # matches by LXC *name* which is shared across all deploys for the
-    # same project/environment.  If a newer deploy's container is already
-    # running with that name, the scan would return the NEW container and
-    # destroy it instead of the old one.
+    # Stored VMID/node plus exact ownership evidence are required. Display
+    # names and broad cluster discovery cannot authorize destructive actions.
     if destroy_container:
         if deploy.container_vmid and deploy.container_node:
             # Precise teardown using the exact VMID persisted at creation time
@@ -182,29 +170,30 @@ async def teardown_deploy(
                 "Teardown: targeting stored LXC %d on %s for deploy %s",
                 vmid, node, deploy_id_str[:8],
             )
-            destroyed = await destroy_lxc_container(adapter, node, vmid)
+            destroyed = await destroy_lxc_container(adapter, node, vmid, ownership=ownership)
             if destroyed:
                 logger.info("Teardown: destroyed LXC %d for deploy %s", vmid, deploy_id_str[:8])
             else:
-                logger.warning("Teardown: failed to destroy LXC %d for deploy %s", vmid, deploy_id_str[:8])
-        else:
-            # Fallback for legacy deploys that predate container_vmid tracking.
-            # Uses hostname scan — acceptable here because these old deploys
-            # won't race with the new VMID-tracked deploys.
-            logger.warning(
-                "Teardown: deploy %s has no stored VMID, falling back to hostname scan '%s'",
-                deploy_id_str[:8], hostname,
+                raise TeardownError(
+                    f"Failed to destroy LXC {vmid} on {node} for deploy {deploy_id_str[:8]}"
+                )
+        elif deploy.container_vmid or deploy.status in {
+            "provisioning",
+            "healthy",
+            "active",
+            "superseded",
+            "stopped",
+        }:
+            raise TeardownError(
+                "Deployment lacks complete immutable container identity; manual reconciliation required"
             )
-            lxc = await _find_lxc_for_deploy(adapter, hostname)
-            if lxc:
-                node, vmid = lxc
-                destroyed = await destroy_lxc_container(adapter, node, vmid)
-                if destroyed:
-                    logger.info("Teardown: destroyed LXC %d for deploy %s", vmid, deploy_id_str[:8])
-                else:
-                    logger.warning("Teardown: failed to destroy LXC %d for deploy %s", vmid, deploy_id_str[:8])
-            else:
-                logger.info("Teardown: no LXC found matching hostname '%s'", hostname)
+        else:
+            logger.info(
+                "Teardown: deploy %s has no container identity in state %s; "
+                "skipping unsafe hostname scan",
+                deploy_id_str[:8],
+                deploy.status,
+            )
 
     # Step 2: Remove per-deploy Nginx config
     nginx_removed = False
@@ -244,18 +233,5 @@ async def teardown_deploy_by_hostname(
     *,
     adapter: ProxmoxAdapter | None = None,
 ) -> bool:
-    """Teardown just the LXC container by hostname (no DB interaction).
-
-    Used for cleanup scenarios where we only need to destroy the container
-    but don't need to update the database (e.g., orphan cleanup).
-
-    Returns True if a container was found and destroyed.
-    """
-    if adapter is None:
-        adapter = get_proxmox_adapter()
-
-    lxc = await _find_lxc_for_deploy(adapter, hostname)
-    if lxc:
-        node, vmid = lxc
-        return await destroy_lxc_container(adapter, node, vmid)
-    return False
+    """Reject legacy hostname-only cleanup; ownership must come from a deploy record."""
+    raise TeardownError("Hostname-only deletion is disabled; use deployment ownership evidence")

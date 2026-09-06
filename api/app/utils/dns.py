@@ -2,7 +2,7 @@
 
 Utilities for generating deploy URLs under the domain scheme:
     <deployid>-<username>.dev.sdc.cpp          (immutable per-deploy URL)
-    <project-slug>-<username>.dev.sdc.cpp      (persistent production URL)
+    <custom-subdomain-or-project-slug>.dev.sdc.cpp (persistent production URL)
 
 Where:
 - deployid  = first 8 chars of the Deploy UUID
@@ -19,6 +19,36 @@ import re
 import uuid
 
 from app.config import settings
+
+
+RESERVED_PRODUCTION_LABELS = frozenset(
+    {
+        "admin",
+        "api",
+        "auth",
+        "grafana",
+        "loki",
+        "monitoring",
+        "prometheus",
+        "registry",
+        "status",
+        "www",
+    }
+)
+
+
+def normalize_production_label(value: str | None) -> str | None:
+    """Normalize and validate an optional production subdomain label."""
+    if value is None or not value.strip():
+        return None
+    label = value.strip().lower()
+    if len(label) > 63 or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label):
+        raise ValueError(
+            "Custom subdomain must be one DNS label using lowercase letters, numbers, and hyphens"
+        )
+    if label in RESERVED_PRODUCTION_LABELS:
+        raise ValueError(f"Custom subdomain '{label}' is reserved for a platform service")
+    return label
 
 
 def sanitize_username(username: str) -> str:
@@ -56,21 +86,30 @@ def deploy_url(deploy_id: uuid.UUID, owner_username: str) -> str:
     return f"https://{deploy_hostname(deploy_id, owner_username)}"
 
 
-def production_hostname(project_slug: str, owner_username: str) -> str:
+def production_hostname(
+    project_slug: str,
+    owner_username: str,
+    custom_subdomain: str | None = None,
+) -> str:
     """Build the persistent production hostname for a project.
 
     This URL always points to the current active production deploy
     and auto-switches when a new deploy is promoted.
 
-    Returns e.g. 'my-app-jsmith.dev.sdc.cpp'
+    Returns e.g. 'my-app.dev.sdc.cpp'. Project slugs are globally unique.
     """
-    safe_user = sanitize_username(owner_username)
-    return f"{project_slug}-{safe_user}.{settings.deploy_domain_suffix}"
+    del owner_username  # Retained in the signature for call-site compatibility.
+    label = normalize_production_label(custom_subdomain) or project_slug
+    return f"{label}.{settings.deploy_domain_suffix}"
 
 
-def production_url(project_slug: str, owner_username: str) -> str:
+def production_url(
+    project_slug: str,
+    owner_username: str,
+    custom_subdomain: str | None = None,
+) -> str:
     """Build the full HTTPS persistent production URL for a project.
 
-    Returns e.g. 'https://my-app-jsmith.dev.sdc.cpp'
+    Returns e.g. 'https://my-app.dev.sdc.cpp'
     """
-    return f"https://{production_hostname(project_slug, owner_username)}"
+    return f"https://{production_hostname(project_slug, owner_username, custom_subdomain)}"

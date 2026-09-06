@@ -100,12 +100,18 @@ ROLE_PERMISSIONS: dict[Role, set[str]] = {
     },
 }
 
-# Map AD group names to roles
+def _parse_groups(raw: str) -> list[str]:
+    """Parse a comma-separated AD group list into clean group names."""
+    return [g.strip() for g in raw.split(",") if g.strip()]
+
+
+# Map AD group names to roles. Each setting accepts a comma-separated list so
+# multiple AD groups can map to the same privilege level.
 GROUP_ROLE_MAP: dict[str, Role] = {
-    settings.ad_developer_group: Role.DEVELOPER,
-    settings.ad_staff_group: Role.STAFF,
-    settings.ad_faculty_group: Role.FACULTY,
+    group: Role.DEVELOPER for group in _parse_groups(settings.ad_developer_group)
 }
+GROUP_ROLE_MAP.update({group: Role.STAFF for group in _parse_groups(settings.ad_staff_group)})
+GROUP_ROLE_MAP.update({group: Role.FACULTY for group in _parse_groups(settings.ad_faculty_group)})
 
 
 def resolve_role(ad_groups: list[str]) -> Role:
@@ -156,3 +162,22 @@ def check_permission(role: Role, permission: str) -> None:
         status_code=status.HTTP_403_FORBIDDEN,
         detail=f"Insufficient permissions: '{permission}' required",
     )
+
+
+def resolve_application_role(claims: dict) -> Role:
+    """Resolve only signed TBD application roles after ID-token verification."""
+    from fastapi import HTTPException
+
+    amr = claims.get("amr")
+    roles = claims.get("application_roles")
+    if (not isinstance(amr, list) or "ad" not in amr
+            or any(method in amr for method in
+                   ("local_break_glass", "local_recovery", "portal_local"))
+            or not isinstance(roles, list) or not all(isinstance(role, str) for role in roles)
+            or "tbd:access" not in roles):
+        raise HTTPException(status_code=403, detail="TBD application access is required")
+    if "tbd:administrator" in roles:
+        return Role.FACULTY
+    if "tbd:user" in roles:
+        return Role.DEVELOPER
+    raise HTTPException(status_code=403, detail="A mapped TBD application role is required")

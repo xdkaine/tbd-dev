@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -79,6 +80,8 @@ class LXCSpec:
     # Proxmox resource pool (e.g. "TBD_Project") — empty = no pool
     pool: str = ""
 
+    description: str = ""
+
     # Tags for identification
     tags: list[str] = field(default_factory=list)
 
@@ -125,6 +128,7 @@ class ProxmoxAdapter:
         self._token_header = f"PVEAPIToken={settings.proxmox_token_id}={settings.proxmox_token_secret}"
 
         self._client: httpx.AsyncClient | None = None
+        self._node_ips: dict[str, str] = {}
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client."""
@@ -136,6 +140,42 @@ class ProxmoxAdapter:
                 timeout=httpx.Timeout(30.0, connect=10.0),
             )
         return self._client
+
+    async def _get_node_ip(self, node: str) -> str | None:
+        """Resolve a cluster node's IP via /cluster/status (cached).
+
+        Needed for large multipart uploads: pveproxy proxies node-targeted
+        requests to other cluster members, and that proxying breaks multipart
+        uploads — they must hit the target node directly.
+        """
+        if self._node_ips:
+            return self._node_ips.get(node)
+        try:
+            data = await self._request("GET", "/api2/json/cluster/status")
+            for entry in data or []:
+                if entry.get("type") == "node" and entry.get("online"):
+                    ip = entry.get("ip")
+                    if entry.get("name") and ip:
+                        self._node_ips[entry["name"]] = ip
+        except ProxmoxError as exc:
+            logger.warning("Could not resolve cluster node IPs: %s", exc)
+        return self._node_ips.get(node)
+
+    async def _get_direct_upload_client(self, node: str) -> tuple[httpx.AsyncClient, str] | None:
+        """Get a client pointed directly at the target node, if resolvable."""
+        node_ip = await self._get_node_ip(node)
+        if not node_ip:
+            return None
+        parsed = httpx.URL(self.base_url)
+        port = parsed.port or 443 if parsed.scheme == "https" else parsed.port or 80
+        base = f"{parsed.scheme}://{node_ip}:{port}"
+        client = httpx.AsyncClient(
+            base_url=base,
+            headers={"Authorization": self._token_header},
+            verify=self.verify_ssl,
+            timeout=httpx.Timeout(300.0, connect=10.0),
+        )
+        return client, base
 
     async def close(self) -> None:
         """Close the HTTP client."""
@@ -236,6 +276,7 @@ class ProxmoxAdapter:
             "ostemplate": spec.os_template,
             "ostype": spec.ostype,
             "hostname": spec.hostname,
+            "description": spec.description,
             "unprivileged": 1 if spec.unprivileged else 0,
             "cores": spec.cores,
             "memory": spec.memory,
@@ -486,6 +527,7 @@ class ProxmoxAdapter:
         """
         storage = storage or settings.proxmox_template_storage
         filename = filename or tarball_path.name
+        upload_target = f"{node}/{storage}"
 
         logger.info(
             "Uploading CT template to node %s, storage %s: %s (%.1f MB)",
@@ -493,32 +535,49 @@ class ProxmoxAdapter:
             tarball_path.stat().st_size / (1024 * 1024),
         )
 
-        client = await self._get_client()
-
-        # Proxmox upload endpoint requires multipart with:
-        # - content: "vztmpl" (content type identifier)
-        # - filename: the file data
-        upload_url = f"/api2/json/nodes/{node}/storage/{storage}/upload"
-
-        try:
-            with open(tarball_path, "rb") as f:
-                response = await client.post(
-                    upload_url,
-                    data={"content": "vztmpl"},
-                    files={"filename": (filename, f, "application/gzip")},
-                    timeout=httpx.Timeout(300.0, connect=30.0),  # 5 min for large uploads
+        # Upload directly against the target node — cross-node pveproxy
+        # proxying breaks multipart uploads. Read bytes fully so httpx sends
+        # Content-Length instead of a chunked body (which pveproxy drops).
+        direct = await self._get_direct_upload_client(node)
+        if direct is not None:
+            client, base_url = direct
+            logger.info("Uploading via direct node endpoint %s", base_url)
+            try:
+                with open(tarball_path, "rb") as f:
+                    response = await client.post(
+                        "/api2/json/nodes/{0}/storage/{1}/upload".format(node, storage),
+                        data={"content": "vztmpl"},
+                        files={"filename": (filename, f.read(), "application/gzip")},
+                        timeout=httpx.Timeout(300.0, connect=30.0),
+                    )
+            except httpx.HTTPError as e:
+                raise ProxmoxError(
+                    message=f"HTTP error uploading template to {node}: {e}",
+                    details=str(e),
                 )
-        except httpx.HTTPError as e:
-            raise ProxmoxError(
-                message=f"HTTP error uploading template to {node}: {e}",
-                details=str(e),
-            )
+            finally:
+                await client.aclose()
+        else:
+            client = await self._get_client()
+            try:
+                with open(tarball_path, "rb") as f:
+                    response = await client.post(
+                        f"/api2/json/nodes/{node}/storage/{storage}/upload",
+                        data={"content": "vztmpl"},
+                        files={"filename": (filename, f.read(), "application/gzip")},
+                        timeout=httpx.Timeout(300.0, connect=30.0),  # 5 min for large uploads
+                    )
+            except httpx.HTTPError as e:
+                raise ProxmoxError(
+                    message=f"HTTP error uploading template to {node}: {e}",
+                    details=str(e),
+                )
 
         if response.status_code >= 400:
             body = response.text
             logger.error(
                 "Template upload error %d on %s: %s",
-                response.status_code, upload_url, body[:1000],
+                response.status_code, upload_target, body[:1000],
             )
             raise ProxmoxError(
                 message=f"Template upload failed ({response.status_code}): {body[:500]}",
@@ -554,6 +613,16 @@ class ProxmoxAdapter:
         """
         storage = storage or settings.proxmox_template_storage
         return f"{storage}:vztmpl/{filename}"
+
+    async def delete_storage_volume(self, node: str, volume_id: str) -> str:
+        """Delete an uploaded template or other storage volume by exact volume ID."""
+        storage = volume_id.split(":", 1)[0]
+        encoded_volume = quote(volume_id, safe="")
+        result = await self._request(
+            "DELETE",
+            f"/api2/json/nodes/{node}/storage/{storage}/content/{encoded_volume}",
+        )
+        return str(result or "")
 
     # ------------------------------------------------------------------
     # VMID allocation

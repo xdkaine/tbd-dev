@@ -1,20 +1,32 @@
-"""Tests for the rate limiting middleware."""
+"""Tests for enforced limits and the intentional health-check exemption."""
 
-import asyncio
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+
+from app.middleware.rate_limit import RateLimitMiddleware, _buckets, settings
 
 
-async def test_rate_limit_allows_normal_traffic(client):
-    """Normal request volume should pass through without 429."""
-    # Health endpoint is lightweight — send a few requests
+async def test_rate_limit_rejects_excess_traffic(monkeypatch):
+    monkeypatch.setattr(settings, "rate_limit_rpm", 2)
+    _buckets.clear()
+    app = FastAPI()
+    app.add_middleware(RateLimitMiddleware)
+
+    @app.get("/limited")
+    async def limited():
+        return {"ok": True}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.get("/limited")).status_code == 200
+        assert (await client.get("/limited")).status_code == 200
+        response = await client.get("/limited")
+        assert response.status_code == 429
+        assert int(response.headers["retry-after"]) > 0
+    _buckets.clear()
+
+
+async def test_health_check_is_exempt_from_rate_limiting(client, monkeypatch):
+    monkeypatch.setattr(settings, "rate_limit_rpm", 0)
     for _ in range(5):
-        resp = await client.get("/health")
-        assert resp.status_code == 200
-
-
-async def test_rate_limit_headers_present(client):
-    """Responses should include X-RateLimit headers."""
-    resp = await client.get("/health")
-    assert resp.status_code == 200
-    # Our middleware sets these headers
-    assert "x-ratelimit-limit" in resp.headers
-    assert "x-ratelimit-remaining" in resp.headers
+        response = await client.get("/health")
+        assert response.status_code == 200

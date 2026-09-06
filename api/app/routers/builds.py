@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.middleware.auth import CurrentUser, get_current_user, get_current_user_from_token
+from app.middleware.auth import CurrentUser, get_current_user, get_current_user_from_token, require_current_session
 from app.models.build import Artifact, Build
 from app.models.deploy import Deploy
 from app.models.environment import Environment
@@ -215,6 +215,10 @@ async def stream_build_logs(
         max_duration = settings.sse_stream_timeout_seconds
 
         while True:
+            try:
+                await require_current_session(current_user)
+            except HTTPException:
+                return
             await db.refresh(build)
 
             current_logs = build.logs or ""
@@ -345,12 +349,13 @@ async def trigger_rebuild(
             detail="No GitHub repository connected. Connect a repo first.",
         )
 
-    # Get the owner's OAuth token
+    # Get the owner's OAuth token (optional — public repos work without one)
     owner_token = await get_owner_github_token(db, project.id)
     if not owner_token:
-        raise HTTPException(
-            status_code=400,
-            detail="No GitHub OAuth token found. Reconnect your GitHub account.",
+        logger.warning(
+            "Manual rebuild for project %s has no owner GitHub token — "
+            "falling back to unauthenticated HEAD fetch (public repos only)",
+            project.id,
         )
 
     # Fetch HEAD commit SHA of the default branch

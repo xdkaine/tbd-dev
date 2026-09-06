@@ -1,5 +1,8 @@
 """TBD Platform - Control Plane API configuration."""
 
+import ipaddress
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -26,6 +29,14 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480  # 8 hours
+
+    # OIDC SSO (platform auth-service). When oidc_issuer is set the API accepts
+    # POST /auth/oidc/exchange with an ID token issued by the provider.
+    oidc_issuer: str = ""  # e.g. https://auth-dev.calpolysoc.org/ (empty = disabled)
+    oidc_client_secret: str = ""
+    oidc_audience: str = ""  # Expected aud claim (registered client_id)
+    oidc_require_application_access: bool = False
+    oidc_jwks_cache_seconds: int = 300  # JWKS refresh interval
 
     # Registry
     registry_url: str = "http://localhost:5000"
@@ -81,8 +92,10 @@ class Settings(BaseSettings):
     proxmox_token_secret: str = ""  # PVEAPIToken UUID secret
     proxmox_storage: str = "local-lvm"  # Storage backend for LXC rootfs volumes
     proxmox_template_storage: str = "local"  # Storage for uploaded CT templates (vztmpl)
+    tbd_instance_namespace: str = "tbd-dev"  # Must differ across control planes
     proxmox_pool: str = ""  # Proxmox resource pool for LXC containers (e.g. "TBD_Project")
     proxmox_bridge: str = "vmbr0"  # Network bridge for LXC containers (e.g. "Critical")
+    proxmox_vlan_tag: int = 0  # Optional fixed VLAN tag for flat-IP deploys (0 = untagged)
 
     # Flat IP allocation (temporary — bypasses VLAN system)
     # When set, deploy_executor uses this range instead of VLAN-based IPs.
@@ -90,6 +103,7 @@ class Settings(BaseSettings):
     deploy_ip_end: str = ""  # Last IP in range (e.g. "10.128.30.100")
     deploy_gateway: str = ""  # Gateway for flat IP range (e.g. "10.128.30.1")
     deploy_subnet_bits: int = 24  # Subnet mask bits (e.g. 24 for /24)
+    deploy_network_cidr: str = ""  # Required containment boundary for flat IP allocation
 
     # OCI conversion work directory
     oci_work_dir: str = "/var/lib/tbd/oci"  # Root directory for skopeo/umoci work
@@ -128,6 +142,38 @@ class Settings(BaseSettings):
     @property
     def group_search_base(self) -> str:
         return self.ad_group_search_base or self.ad_base_dn
+
+    @model_validator(mode="after")
+    def validate_flat_ip_network(self) -> "Settings":
+        """Fail startup when a flat-IP range can escape its approved network."""
+        values = (self.deploy_ip_start, self.deploy_ip_end, self.deploy_gateway)
+        if not any(values):
+            return self
+        if not all(values):
+            raise ValueError(
+                "DEPLOY_IP_START, DEPLOY_IP_END, and DEPLOY_GATEWAY must be set together"
+            )
+        if not self.deploy_network_cidr:
+            raise ValueError("DEPLOY_NETWORK_CIDR is required when flat IP allocation is enabled")
+
+        network = ipaddress.IPv4Network(self.deploy_network_cidr, strict=True)
+        if network.prefixlen != self.deploy_subnet_bits:
+            raise ValueError("DEPLOY_SUBNET_BITS must match DEPLOY_NETWORK_CIDR")
+
+        start = ipaddress.IPv4Address(self.deploy_ip_start)
+        end = ipaddress.IPv4Address(self.deploy_ip_end)
+        gateway = ipaddress.IPv4Address(self.deploy_gateway)
+        if start > end:
+            raise ValueError("DEPLOY_IP_START must not be greater than DEPLOY_IP_END")
+        for label, address in (("start", start), ("end", end), ("gateway", gateway)):
+            if address not in network:
+                raise ValueError(f"DEPLOY_{label.upper()} must be inside DEPLOY_NETWORK_CIDR")
+        if start in (network.network_address, network.broadcast_address) or end in (
+            network.network_address,
+            network.broadcast_address,
+        ):
+            raise ValueError("DEPLOY_IP_START and DEPLOY_IP_END must be usable host addresses")
+        return self
 
     model_config = {"env_prefix": "", "case_sensitive": False}
 

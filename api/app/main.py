@@ -6,7 +6,9 @@ and lifecycle events.
 
 import asyncio
 import logging
+import os
 import sys
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -74,17 +76,20 @@ async def lifespan(app: FastAPI):
     # Start background lifecycle service (expires_at enforcement)
     from app.services.lifecycle import run_lifecycle_loop
 
-    lifecycle_task = asyncio.create_task(run_lifecycle_loop())
+    jobs_enabled = os.environ.get("TBD_BACKGROUND_JOBS_ENABLED", "true") == "true"
+    lifecycle_task = asyncio.create_task(run_lifecycle_loop()) if jobs_enabled else None
 
     # Start background reconciler (stale configs, duplicate IPs, stuck deploys)
     from app.services.reconciler import run_reconciler_loop
 
-    reconciler_task = asyncio.create_task(run_reconciler_loop())
+    reconciler_task = asyncio.create_task(run_reconciler_loop()) if jobs_enabled else None
 
     yield
 
     # Shutdown: cancel background tasks
     for task in (lifecycle_task, reconciler_task):
+        if task is None:
+            continue
         task.cancel()
         try:
             await task
@@ -174,7 +179,13 @@ app.include_router(audit.router)
 @app.get("/health", tags=["health"])
 async def health_check():
     """Health check endpoint."""
-    return {"status": "ok", "service": "tbd-api", "version": "0.1.0"}
+    return {
+        "status": "ok",
+        "service": "tbd-api",
+        "version": "0.1.0",
+        "revision": os.environ.get("APP_REVISION", "development"),
+        "releaseProbe": (Path(__file__).parent / "release-probe.txt").read_text().strip(),
+    }
 
 
 @app.get("/", tags=["health"])

@@ -11,6 +11,7 @@ Per docs/oci-lxc-conversion.md.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import shlex
@@ -153,6 +154,9 @@ async def pull_image(image_ref: str, tag: str) -> Path:
     cmd = [
         "skopeo", "copy",
         "--src-tls-verify=false",  # Internal registry, no TLS
+        # Force true OCI media types — umoci rejects docker v2s2 layer types
+        # preserved by skopeo when the source manifest is schema2.
+        "--format", "oci",
         src, dst,
     ]
 
@@ -172,6 +176,10 @@ async def pull_image(image_ref: str, tag: str) -> Path:
             )
             if rc == 0:
                 logger.info("Image pulled to %s", layout_dir)
+                # Some skopeo versions leave individual layer/config entries
+                # with docker mediatypes even under --format oci; normalize so
+                # umoci (which strictly requires OCI types) can unpack.
+                _normalize_layout_mediatypes(layout_dir)
                 return layout_dir
         except TimeoutError:
             if attempt == max_retries:
@@ -257,6 +265,72 @@ def _resolve_oci_blob(layout_dir: Path, digest: str) -> Path:
         raise ValueError(f"Invalid OCI digest: {digest}")
     algo, hex_digest = digest.split(":", 1)
     return layout_dir / "blobs" / algo / hex_digest
+
+
+# Docker v2s2 -> OCI media type mapping for entries skopeo fails to rewrite
+_DOCKER_TO_OCI_MEDIATYPES = {
+    "application/vnd.docker.container.image.v1+json": "application/vnd.oci.image.config.v1+json",
+    "application/vnd.docker.image.rootfs.diff.tar.gzip": "application/vnd.oci.image.layer.v1.tar+gzip",
+    "application/vnd.docker.image.rootfs.diff.tar": "application/vnd.oci.image.layer.v1.tar",
+}
+
+
+def _normalize_layout_mediatypes(layout_dir: Path) -> None:
+    """Rewrite leftover docker mediatypes in an OCI layout to OCI equivalents.
+
+    Some skopeo versions convert the manifest itself under ``--format oci``
+    but leave individual config/layer descriptors with docker types, which
+    umoci rejects. Blobs are content-identical — only descriptor strings need
+    updating. Because manifests are content-addressed, any rewritten manifest
+    is stored as a new blob and referenced by its recomputed digest.
+    """
+    index_path = layout_dir / "index.json"
+    if not index_path.exists():
+        return
+
+    changed = False
+    try:
+        index = json.loads(index_path.read_text())
+        for desc in index.get("manifests", []):
+            blob_path = _resolve_oci_blob(layout_dir, desc["digest"])
+            manifest = json.loads(blob_path.read_text())
+
+            manifest_changed = False
+            config_type = manifest.get("config", {}).get("mediaType")
+            if config_type in _DOCKER_TO_OCI_MEDIATYPES:
+                manifest["config"]["mediaType"] = _DOCKER_TO_OCI_MEDIATYPES[config_type]
+                manifest_changed = True
+
+            for layer in manifest.get("layers", []):
+                ltype = layer.get("mediaType")
+                if ltype in _DOCKER_TO_OCI_MEDIATYPES:
+                    layer["mediaType"] = _DOCKER_TO_OCI_MEDIATYPES[ltype]
+                    manifest_changed = True
+
+            if not manifest_changed:
+                continue
+
+            # Store rewritten manifest as a new content-addressed blob
+            blob_bytes = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
+            new_digest = "sha256:" + hashlib.sha256(blob_bytes).hexdigest()
+            new_blob_path = _resolve_oci_blob(layout_dir, new_digest)
+            if not new_blob_path.exists():
+                new_blob_path.parent.mkdir(parents=True, exist_ok=True)
+                new_blob_path.write_bytes(blob_bytes)
+
+            desc["digest"] = new_digest
+            desc["size"] = len(blob_bytes)
+            if "mediaType" in desc and desc["mediaType"].startswith(
+                "application/vnd.docker."
+            ):
+                desc["mediaType"] = "application/vnd.oci.image.manifest.v1+json"
+            changed = True
+
+        if changed:
+            index_path.write_text(json.dumps(index))
+            logger.info("Normalized docker mediatypes in OCI layout %s", layout_dir)
+    except Exception as exc:  # noqa: BLE001 — normalization is best-effort
+        logger.warning("Failed to normalize OCI layout %s: %s", layout_dir, exc)
 
 
 def _select_manifest_descriptor(manifests: list[dict]) -> dict:

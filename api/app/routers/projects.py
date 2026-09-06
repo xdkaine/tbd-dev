@@ -14,6 +14,7 @@ from app.models.deploy import Deploy
 from app.models.environment import Environment
 from app.models.network import Quota
 from app.models.project import Project, ProjectMember
+from app.models.user import User
 from app.schemas.project import (
     ProjectCreate,
     ProjectListResponse,
@@ -84,17 +85,26 @@ async def create_project(
     """Create a new project."""
     check_permission(current_user.role, "projects.create")
 
-    # Check slug uniqueness
-    existing = await db.execute(select(Project).where(Project.slug == body.slug))
-    if existing.scalar_one_or_none():
+    # Project slugs and production DNS labels each occupy a global namespace.
+    production_label = body.custom_subdomain or body.slug
+    existing = await db.execute(
+        select(Project).where(
+            or_(
+                Project.slug == body.slug,
+                Project.custom_subdomain == production_label,
+            )
+        )
+    )
+    if existing.scalars().first():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Project with slug '{body.slug}' already exists",
+            detail=f"Project slug or subdomain '{production_label}' is already in use",
         )
 
     project = Project(
         name=body.name,
         slug=body.slug,
+        custom_subdomain=body.custom_subdomain or body.slug,
         repo_url=body.repo_url,
         owner_id=current_user.id,
         default_env=body.default_env,
@@ -106,7 +116,7 @@ async def create_project(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Project with slug '{body.slug}' already exists",
+            detail=f"Project slug or subdomain '{production_label}' is already in use",
         )
 
     # Create default environment
@@ -196,12 +206,65 @@ async def update_project(
     else:
         check_permission(current_user.role, "projects.update")
 
-    # Apply updates
+    # Apply updates. Clearing the override resets the hostname to the globally
+    # unique project slug rather than releasing the project's DNS claim.
     update_data = body.model_dump(exclude_unset=True)
+    old_subdomain = project.custom_subdomain
+    if "custom_subdomain" in update_data and update_data["custom_subdomain"] is None:
+        update_data["custom_subdomain"] = project.slug
     for field, value in update_data.items():
         setattr(project, field, value)
 
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Subdomain '{update_data.get('custom_subdomain')}' is already in use",
+        ) from exc
+
+    # Replace the exact Nginx server_name when a live project's label changes.
+    if project.custom_subdomain != old_subdomain and project.production_url:
+        active_result = await db.execute(
+            select(Deploy)
+            .join(Environment, Deploy.env_id == Environment.id)
+            .where(
+                Environment.project_id == project.id,
+                Deploy.status == "active",
+                Deploy.container_ip.isnot(None),
+            )
+            .order_by(Deploy.promoted_at.desc(), Deploy.created_at.desc())
+            .limit(1)
+        )
+        active_deploy = active_result.scalar_one_or_none()
+        if active_deploy:
+            owner_username = (
+                await db.execute(select(User.username).where(User.id == project.owner_id))
+            ).scalar_one()
+            from app.services.dns_routing import register_production_routing
+            from app.utils.dns import production_url
+
+            try:
+                await register_production_routing(
+                    project_slug=project.slug,
+                    owner_username=owner_username,
+                    backend_ip=active_deploy.container_ip,
+                    backend_port=active_deploy.container_port or 3000,
+                    deploy_id=str(active_deploy.id),
+                    custom_subdomain=project.custom_subdomain,
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Subdomain was not changed because routing could not be updated",
+                ) from exc
+            project.production_url = production_url(
+                project.slug,
+                owner_username,
+                project.custom_subdomain,
+            )
+            await db.flush()
 
     # Audit
     await write_audit_log(

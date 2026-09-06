@@ -62,7 +62,7 @@ interface SidebarProps {
 
 /** Sidebar content shared between desktop and mobile */
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { user, logout } = useAuth();
+  const { user, logout, logoutError } = useAuth();
   const pathname = usePathname();
 
   if (!user) return null;
@@ -131,11 +131,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </p>
         <p className="truncate text-xs text-zinc-500">{user.email}</p>
         <button
-          onClick={logout}
+          title="End this SSO session and its connected application sessions"
+          onClick={() => void logout()}
           className="mt-2 text-xs text-red-400 hover:text-red-300 transition-colors"
         >
           Sign out
         </button>
+        {logoutError && <p role="alert" className="text-xs text-red-400">{logoutError}</p>}
       </div>
     </>
   );

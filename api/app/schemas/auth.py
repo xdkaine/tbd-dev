@@ -13,6 +13,13 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1)
 
 
+class OidcExchangeRequest(BaseModel):
+    """ID token issued by the platform auth-service (authorization-code + PKCE flow)."""
+
+    id_token: str = Field(..., min_length=16)
+    access_token: str | None = Field(default=None, min_length=1)
+
+
 class TokenResponse(BaseModel):
     """JWT token returned after successful login."""
 

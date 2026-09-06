@@ -127,6 +127,7 @@ import type {
 /* Auth */
 export const api = {
   auth: {
+    logout: () => request<void>("/auth/logout", { method: "POST" }),
     login: (body: LoginRequest) =>
       request<TokenResponse>("/auth/login", {
         method: "POST",

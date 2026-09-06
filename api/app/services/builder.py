@@ -644,26 +644,38 @@ async def _run_cmd(
         env=full_env,
     )
 
-    output_lines = []
-    # Feed stdin data if provided (e.g., for --password-stdin)
-    if stdin_data and proc.stdin:
-        proc.stdin.write(stdin_data.encode("utf-8"))
-        await proc.stdin.drain()
-        proc.stdin.close()
-    while True:
-        line = await proc.stdout.readline()
-        if not line:
-            break
-        decoded = line.decode("utf-8", errors="replace").rstrip()
-        output_lines.append(decoded)
-        if log_lines is not None:
-            log_lines.append(decoded)
-        # Log first 500 lines to avoid flooding
-        if len(output_lines) <= 500:
-            logger.debug("[build] %s", decoded)
+    try:
+        output_lines = []
+        # Feed stdin data if provided (e.g., for --password-stdin)
+        if stdin_data and proc.stdin:
+            proc.stdin.write(stdin_data.encode("utf-8"))
+            await proc.stdin.drain()
+            proc.stdin.close()
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                break
+            decoded = line.decode("utf-8", errors="replace").rstrip()
+            output_lines.append(decoded)
+            if log_lines is not None:
+                log_lines.append(decoded)
+            # Log first 500 lines to avoid flooding
+            if len(output_lines) <= 500:
+                logger.debug("[build] %s", decoded)
 
-    await proc.wait()
-    return proc.returncode, "\n".join(output_lines)
+        await proc.wait()
+        return proc.returncode, "\n".join(output_lines)
+    except asyncio.CancelledError:
+        # Closing buildctl cancels its remote BuildKit solve as well.
+        if proc.returncode is None:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+        raise
+
 
 
 async def run_build(build_id: uuid.UUID, db: AsyncSession) -> None:
@@ -854,99 +866,19 @@ async def run_build(build_id: uuid.UUID, db: AsyncSession) -> None:
 
         log(f"Building image: {image_tag}")
 
-        # Build the docker build command with correct context and Dockerfile
-        docker_build_cmd = [
-            "docker", "build",
-            "-t", image_tag,
-            "-t", latest_tag,
-            "--label", f"tbd.project={project.slug}",
-            "--label", f"tbd.build={str(build_id)}",
-            "--label", f"tbd.commit={build.commit_sha[:8]}",
-        ]
-
-        # Add -f flag when Dockerfile is not at the default location
-        # Docker looks for "Dockerfile" in the build context root by default.
-        # We need -f when: (a) build context is not root, or (b) Dockerfile
-        # is not named "Dockerfile" at the build context root.
-        if build_info.dockerfile_path:
-            # Check if Dockerfile is at the default location for the build context
-            if build_info.build_context == ".":
-                default_df = "Dockerfile"
-            else:
-                default_df = f"{build_info.build_context}/Dockerfile"
-            if build_info.dockerfile_path != default_df:
-                docker_build_cmd.extend(["-f", build_info.dockerfile_path])
-
-        # Build context is relative to repo root
-        docker_build_cmd.append(
-            build_info.build_context if build_info.build_context != "." else "."
-        )
-
-        rc, _ = await _run_cmd(
-            docker_build_cmd,
-            cwd=repo_dir,
+        from app.services.buildkit_backend import build_and_publish
+        image_digest, image_size = await build_and_publish(
+            _run_cmd, repo_dir=repo_dir, context=build_info.build_context,
+            dockerfile=build_info.dockerfile_path, image_tag=image_tag,
+            latest_tag=latest_tag,
+            labels={"tbd.project": project.slug, "tbd.build": str(build_id),
+                    "tbd.commit": build.commit_sha[:8]},
+            registry_url=settings.registry_url,
+            username=settings.registry_username, password=settings.registry_password,
             log_lines=log_lines,
         )
-        if rc != 0:
-            log(f"ERROR: docker build failed (exit {rc})")
-            build.status = "failed"
-            build.logs = "\n".join(log_lines)
-            build.finished_at = datetime.now(timezone.utc)
-            await db.flush()
-            return
-
-        log("Build complete")
+        log("Build and registry push complete")
         await flush_logs(build)
-
-        # --- Step 5: Push to registry ---
-        # Login to registry if credentials are configured
-        if settings.registry_username and settings.registry_password:
-            log("Authenticating with registry...")
-            rc, _ = await _run_cmd(
-                [
-                    "docker", "login", registry_host,
-                    "-u", settings.registry_username,
-                    "--password-stdin",
-                ],
-                log_lines=log_lines,
-                stdin_data=settings.registry_password,
-            )
-            if rc != 0:
-                log("WARNING: Registry login failed, push may fail")
-
-        log(f"Pushing image to registry...")
-        rc, _ = await _run_cmd(
-            ["docker", "push", image_tag],
-            log_lines=log_lines,
-        )
-        if rc != 0:
-            log(f"ERROR: docker push failed (exit {rc})")
-            build.status = "failed"
-            build.logs = "\n".join(log_lines)
-            build.finished_at = datetime.now(timezone.utc)
-            await db.flush()
-            return
-
-        # Also push latest tag
-        await _run_cmd(
-            ["docker", "push", latest_tag],
-            log_lines=log_lines,
-        )
-
-        log("Push complete")
-        await flush_logs(build)
-
-        # --- Step 6: Get image digest ---
-        rc, digest_output = await _run_cmd(
-            ["docker", "inspect", "--format={{.Id}}", image_tag],
-        )
-        image_digest = digest_output.strip() if rc == 0 else f"sha256:{build.commit_sha}"
-
-        # Get image size
-        rc, size_output = await _run_cmd(
-            ["docker", "inspect", "--format={{.Size}}", image_tag],
-        )
-        image_size = int(size_output.strip()) if rc == 0 and size_output.strip().isdigit() else 0
 
         # --- Step 7: Create artifact record ---
         build.image_ref = image_tag

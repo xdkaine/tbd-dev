@@ -28,6 +28,10 @@ RUN npm run build
 FROM base AS runner
 WORKDIR /app
 
+ARG APP_REVISION=development
+ENV APP_REVISION=$APP_REVISION
+LABEL org.opencontainers.image.revision=$APP_REVISION
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 

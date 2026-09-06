@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.middleware.auth import CurrentUser, get_current_user, get_current_user_from_token
+from app.middleware.auth import CurrentUser, get_current_user, get_current_user_from_token, require_current_session
 from app.models.build import Artifact, Build
 from app.models.deploy import Deploy
 from app.models.environment import Environment
@@ -507,8 +507,13 @@ async def rollback_deploy(
                 backend_ip=previous_deploy.container_ip,
                 backend_port=backend_port,
                 deploy_id=str(previous_deploy.id),
+                custom_subdomain=project.custom_subdomain,
             )
-            project.production_url = make_production_url(project.slug, owner_username)
+            project.production_url = make_production_url(
+                project.slug,
+                owner_username,
+                project.custom_subdomain,
+            )
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(
@@ -624,6 +629,7 @@ async def promote_deploy(
             backend_ip=deploy.container_ip,
             backend_port=backend_port,
             deploy_id=str(deploy.id),
+            custom_subdomain=project.custom_subdomain,
         )
     except Exception as e:
         raise HTTPException(
@@ -633,7 +639,11 @@ async def promote_deploy(
 
     # Update project's production URL
     from app.utils.dns import production_url
-    project.production_url = production_url(project.slug, owner_username)
+    project.production_url = production_url(
+        project.slug,
+        owner_username,
+        project.custom_subdomain,
+    )
     await db.flush()
 
     await write_audit_log(
@@ -773,7 +783,12 @@ async def stop_deploy(
     adapter = get_proxmox_adapter()
 
     if deploy.container_vmid and deploy.container_node:
-        await stop_lxc_container(adapter, deploy.container_node, deploy.container_vmid)
+        stopped = await stop_lxc_container(
+            adapter, deploy.container_node, deploy.container_vmid,
+            ownership=(project.id, deploy.env_id, deploy.id),
+        )
+        if not stopped:
+            raise HTTPException(status_code=409, detail="Container ownership or stop could not be verified")
 
     # Remove per-deploy Nginx routing (traffic should stop)
     await unregister_deploy_routing(str(deploy_id))
@@ -835,7 +850,7 @@ async def start_deploy(
     await _check_container_limit(db, project.id)
 
     # Start the LXC container
-    from app.services.deploy_teardown import _find_lxc_for_deploy
+    from app.services.resource_ownership import require_owned
     from app.services.proxmox_adapter import get_proxmox_adapter, ProxmoxError
     from app.services.dns_routing import register_deploy_routing
 
@@ -845,11 +860,13 @@ async def start_deploy(
     environment = env_result.scalar_one_or_none()
     hostname = f"{project.slug}-{environment.name}" if environment else ""
 
+    if not deploy.container_vmid or not deploy.container_node:
+        raise HTTPException(status_code=409, detail="Stored container identity is required")
     if hostname:
-        lxc = await _find_lxc_for_deploy(adapter, hostname)
-        if lxc:
-            node, vmid = lxc
+        if deploy.container_vmid and deploy.container_node:
+            node, vmid = deploy.container_node, deploy.container_vmid
             try:
+                await require_owned(adapter, node, vmid, project.id, deploy.env_id, deploy.id)
                 start_upid = await adapter.start_lxc(node, vmid)
                 if start_upid:
                     await adapter.wait_for_task(node, start_upid, timeout=60.0)
@@ -1051,6 +1068,10 @@ async def stream_deploy_logs(
         max_duration = settings.sse_stream_timeout_seconds
 
         while True:
+            try:
+                await require_current_session(current_user)
+            except HTTPException:
+                return
             # Refresh deploy from DB to get latest logs
             await db.refresh(deploy)
 

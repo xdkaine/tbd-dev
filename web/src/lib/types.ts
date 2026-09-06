@@ -53,6 +53,7 @@ export interface Project {
   deploy_locked: boolean;
   expires_at: string | null;
   production_url: string | null;
+  custom_subdomain: string | null;
   repo: Repo | null;
   created_at: string;
 }
@@ -62,6 +63,7 @@ export interface ProjectCreate {
   slug: string;
   repo_url?: string | null;
   default_env?: string;
+  custom_subdomain?: string | null;
 }
 
 export interface ProjectUpdate {
@@ -79,6 +81,7 @@ export interface ProjectUpdate {
   webhook_url?: string | null;
   deploy_locked?: boolean | null;
   expires_at?: string | null;
+  custom_subdomain?: string | null;
 }
 
 export interface ProjectListResponse {

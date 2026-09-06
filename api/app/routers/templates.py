@@ -12,7 +12,7 @@ Endpoints:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -297,7 +297,14 @@ async def deploy_template(
             project_slug = body.repo_name.lower().replace(".", "-").replace("_", "-")
 
             # Ensure slug uniqueness
-            existing = await db.execute(select(Project).where(Project.slug == project_slug))
+            existing = await db.execute(
+                select(Project).where(
+                    or_(
+                        Project.slug == project_slug,
+                        Project.custom_subdomain == project_slug,
+                    )
+                )
+            )
             if existing.scalar_one_or_none():
                 import uuid as _uuid
                 project_slug = f"{project_slug}-{str(_uuid.uuid4())[:4]}"
@@ -305,6 +312,7 @@ async def deploy_template(
             project = Project(
                 name=body.repo_name,
                 slug=project_slug,
+                custom_subdomain=project_slug,
                 repo_url=repo_html_url,
                 owner_id=current_user.id,
                 default_env="production",
@@ -437,4 +445,3 @@ async def deploy_template(
         message=f"Project created from template '{template.name}'. "
         + ("Build triggered." if initial_build_id else "Push to trigger first build."),
     )
-
