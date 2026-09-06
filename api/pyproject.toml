@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "tbd-api"
 version = "0.1.0"
@@ -30,6 +34,14 @@ dev = [
     "aiosqlite>=0.20.0",
     "ruff>=0.7.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app", "app.*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+app = ["release-probe.txt"]
 
 [tool.ruff]
 target-version = "py311"
