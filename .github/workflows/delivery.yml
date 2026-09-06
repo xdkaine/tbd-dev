@@ -14,6 +14,7 @@ jobs:
   checks:
     uses: ./.github/workflows/checks.yml
   matrix:
+    name: Validate release configuration
     runs-on: ubuntu-24.04
     outputs:
       images: ${{ steps.config.outputs.images }}
@@ -34,6 +35,7 @@ jobs:
           PY
       - run: python3 -m unittest discover -s deploy/scripts -p '*_test.py'
   images:
+    name: Build and publish ${{ matrix.kind }}
     needs: [checks, matrix]
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
@@ -88,6 +90,7 @@ jobs:
           path: digests/*.json
           retention-days: 7
   release:
+    name: Publish deployment instructions
     needs: [checks, matrix, images]
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
