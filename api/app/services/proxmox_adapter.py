@@ -695,7 +695,7 @@ class ProxmoxAdapter:
         """Extract the node name from a Proxmox UPID string.
 
         UPID format: UPID:{node}:{pid}:{pstart}:{starttime}:{type}:{id}:{user}:
-        Example: UPID:gonk:00106D1D:2170691D:69A8A69E:imgcopy::uma@pve!uma-ejmis:
+        # Example: PVEAPIToken=ci-example@pve!example-token on pve.example.invalid
 
         Returns:
             Node name if parseable, None otherwise.
