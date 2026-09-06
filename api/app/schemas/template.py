@@ -3,11 +3,13 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 class TemplateResponse(BaseModel):
     """Template in API responses."""
+
+    _source_tree_sha: str = PrivateAttr(default="")
 
     id: uuid.UUID
     name: str
@@ -20,7 +22,7 @@ class TemplateResponse(BaseModel):
     tags: list[str] = []
     sort_order: int = 0
     active: bool = True
-    created_at: datetime
+    created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 

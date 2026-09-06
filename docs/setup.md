@@ -482,3 +482,33 @@ Requests flow:
 2. GitHub webhooks -> API -> build records + commit statuses
 3. API built-in builder -> registry (push image) -> record artifact, trigger deploy
 4. API -> Proxmox (provision LXC) -> health check -> promote
+
+### GitHub-backed starter catalog
+
+The template gallery discovers direct `templates/<slug>/` folders in
+`TEMPLATE_SOURCE_REPO` (default `xdkaine/tbd-dev`) at `TEMPLATE_SOURCE_BRANCH`
+(default `main`). A starter must contain a regular `Dockerfile`. Frameworks are
+inferred from Next.js/Vite configuration, Go modules, Python dependency files,
+Node package metadata, or static-site files. New folders become visible after
+at most the 10-minute source cache lifetime; no catalog seed insert is required.
+
+Existing `templates` database rows remain optional overrides for names,
+descriptions, ordering and visibility. A disabled override stays hidden. A row
+whose source folder was removed is not listed or deployable. Listing, details,
+and deployment resolve the same catalog. Discovery performs no database writes.
+The `templates` table itself still requires the normal schema migrations.
+GitHub-discovered entries have a stable ID and a null `created_at` until a local
+catalog row exists; this does not invent a database creation date.
+
+For a private source, configure `TEMPLATE_SOURCE_TOKEN` with read access to the
+source repository. Public catalog browsing does not require the user's GitHub
+account to be linked. Repository creation still requires that linked account.
+GitHub failures return a 503 with a visible error rather than an empty catalog.
+In k3s, change the API's Secret and roll out the API to load settings; modifying
+an old Compose `.env` does not update the running pods.
+
+Deployments copy the immutable Git tree used for catalog discovery, even if
+the configured branch moves meanwhile. Failed source refreshes return 503 and
+back off for 60 seconds instead of retrying GitHub on every gallery request.
+For multiple replicas or busy shared egress IPs, configure a source read token
+to avoid sharing GitHub's small unauthenticated rate allowance.
