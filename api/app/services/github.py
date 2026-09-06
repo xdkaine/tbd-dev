@@ -412,6 +412,7 @@ async def create_repo_from_template(
     private: bool = False,
     source_branch: str = "main",
     source_token: str | None = None,
+    source_tree_sha: str | None = None,
 ) -> dict | None:
     """Create a new GitHub repo populated with files from a template directory.
 
@@ -499,15 +500,19 @@ async def create_repo_from_template(
 
         try:
             # ---- 2. Read source repo tree ----
-            ref_resp = await client.get(
-                f"{GITHUB_API_BASE}/repos/{source_repo}/git/ref/heads/{source_branch}",
-                headers=read_headers,
-            )
-            ref_resp.raise_for_status()
-            src_commit_sha = ref_resp.json()["object"]["sha"]
+            # Catalog selections supply the exact tree used for discovery.
+            # Legacy callers may still resolve the configured branch here.
+            src_tree_ref = source_tree_sha
+            if src_tree_ref is None:
+                ref_resp = await client.get(
+                    f"{GITHUB_API_BASE}/repos/{source_repo}/git/ref/heads/{source_branch}",
+                    headers=read_headers,
+                )
+                ref_resp.raise_for_status()
+                src_tree_ref = ref_resp.json()["object"]["sha"]
 
             tree_resp = await client.get(
-                f"{GITHUB_API_BASE}/repos/{source_repo}/git/trees/{src_commit_sha}",
+                f"{GITHUB_API_BASE}/repos/{source_repo}/git/trees/{src_tree_ref}",
                 params={"recursive": "1"},
                 headers=read_headers,
             )

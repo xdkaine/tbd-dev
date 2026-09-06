@@ -188,7 +188,7 @@ export function TemplateGallery({ onDeployed, onCancel }: TemplateGalleryProps) 
           </svg>
           Loading templates...
         </div>
-      ) : templates.length === 0 ? (
+      ) : error ? null : templates.length === 0 ? (
         <p className="py-6 text-center text-sm text-zinc-500">
           No templates available yet.
         </p>

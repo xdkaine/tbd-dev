@@ -508,7 +508,7 @@ export interface Template {
   tags: string[];
   sort_order: number;
   active: boolean;
-  created_at: string;
+  created_at: string | null;
 }
 
 export interface TemplateListResponse {

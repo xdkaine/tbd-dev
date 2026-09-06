@@ -12,14 +12,15 @@ Endpoints:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings as app_settings
 from app.database import get_db
 from app.middleware.auth import CurrentUser, get_current_user
-from app.models.project import Project, Repo
 from app.models.environment import Environment
 from app.models.network import Quota
+from app.models.project import Project, Repo
 from app.models.template import Template
 from app.models.user import User
 from app.schemas.template import (
@@ -38,7 +39,7 @@ from app.services.github import (
 )
 from app.services.network_allocator import auto_allocate_on_project_create
 from app.services.rbac import Role, check_permission
-from app.config import settings as app_settings
+from app.services.template_catalog import list_catalog, resolve_template
 
 logger = logging.getLogger(__name__)
 
@@ -55,22 +56,9 @@ async def list_templates(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all active templates, ordered by sort_order then name."""
-    query = select(Template).where(Template.active.is_(True)).order_by(
-        Template.sort_order, Template.name
-    )
-    result = await db.execute(query)
-    templates = result.scalars().all()
-
-    count_q = select(func.count()).select_from(
-        select(Template.id).where(Template.active.is_(True)).subquery()
-    )
-    total = (await db.execute(count_q)).scalar()
-
-    return TemplateListResponse(
-        items=[TemplateResponse.model_validate(t) for t in templates],
-        total=total or 0,
-    )
+    """Discover GitHub starters, applying optional database catalog overrides."""
+    items = await list_catalog(db)
+    return TemplateListResponse(items=items, total=len(items))
 
 
 @router.get("/{slug}", response_model=TemplateResponse)
@@ -79,14 +67,8 @@ async def get_template(
     current_user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a single template by slug."""
-    result = await db.execute(
-        select(Template).where(Template.slug == slug, Template.active.is_(True))
-    )
-    template = result.scalar_one_or_none()
-    if template is None:
-        raise HTTPException(status_code=404, detail="Template not found")
-    return TemplateResponse.model_validate(template)
+    """Resolve the same source catalog used by listing and deployment."""
+    return await resolve_template(db, slug)
 
 
 # ---------------------------------------------------------------------------
@@ -236,13 +218,8 @@ async def deploy_template(
     """
     check_permission(current_user.role, "projects.create")
 
-    # 1. Look up template
-    result = await db.execute(
-        select(Template).where(Template.slug == slug, Template.active.is_(True))
-    )
-    template = result.scalar_one_or_none()
-    if template is None:
-        raise HTTPException(status_code=404, detail="Template not found")
+    # Resolve GitHub starters even when no database seed row exists.
+    template = await resolve_template(db, slug)
 
     # 2. Verify GitHub token
     user_result = await db.execute(select(User).where(User.id == current_user.id))
@@ -263,6 +240,7 @@ async def deploy_template(
             new_repo_description=body.description,
             private=body.private,
             source_branch=app_settings.template_source_branch,
+            source_tree_sha=template._source_tree_sha,
             source_token=app_settings.template_source_token or None,
         )
     except PermissionError as exc:
